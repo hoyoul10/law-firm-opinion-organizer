@@ -1,13 +1,7 @@
 // 📍 원문 위치 표시 (Design Ref: §4.1 — PDF는 "쪽 + 문단", 그 외는 "문단")
 
+import { formatLocation } from "@/lib/labels";
 import type { SourceLocation } from "@/lib/reply-types";
-
-export function formatLocation(loc: SourceLocation): string {
-  const parts = [loc.fileName];
-  if (loc.page) parts.push(`${loc.page}쪽`);
-  if (loc.paragraph) parts.push(`${loc.paragraph}문단`);
-  return parts.join(" ");
-}
 
 export default function SourceBadge({ sources }: { sources: SourceLocation[] }) {
   if (sources.length === 0) return null;

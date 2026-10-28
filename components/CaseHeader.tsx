@@ -4,20 +4,9 @@
 // 입력한 값은 정리 결과의 identity.manualLabel에 들어가 초안·HTML에도 그대로 쓴다
 
 import { useState } from "react";
-import type { CaseIdentity, ReplySummary } from "@/lib/reply-types";
+import { caseLabel } from "@/lib/labels";
+import type { ReplySummary } from "@/lib/reply-types";
 import SourceBadge from "./SourceBadge";
-
-/** 화면·초안·HTML에서 함께 쓰는 사건 표시 글 */
-export function caseLabel(identity: CaseIdentity): string {
-  if (identity.manualLabel) return identity.manualLabel;
-  const items: string[] = [];
-  if (identity.caseNumber) items.push(`사건 ${identity.caseNumber}`);
-  if (identity.debtorName) items.push(`채무자 ${identity.debtorName}`);
-  if (!identity.caseNumber && identity.beneficiaryNames.length > 0) {
-    items.push(`수익자 ${identity.beneficiaryNames.join(", ")}`);
-  }
-  return items.join(" · ");
-}
 
 interface Props {
   summary: ReplySummary;

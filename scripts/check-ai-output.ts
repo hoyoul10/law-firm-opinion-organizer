@@ -1,10 +1,12 @@
-// PLAN 8 확인: AI 답 모양 검사와 내용 검사가 맞는 답은 통과시키고 틀린 답은 막는지 본다.
+// AI 답 모양 검사·내용 검사(PLAN 8~19)와 초안 검사·HTML 안전 처리(PLAN 20~23)가 맞게 동작하는지 본다.
 // 실행: npm run check:ai-output  (OpenAI를 부르지 않으므로 비용이 들지 않는다)
 
 import { zodTextFormat } from "openai/helpers/zod";
 import { NOT_IN_REPLY, type ReplyInput } from "../lib/reply-types";
 import { ReplyInputSchema, SummaryOutputSchema, type SummaryOutput } from "../lib/server/schemas";
-import { validateSummaryOutput } from "../lib/server/validate";
+import { validateDraftOutput, validateSummaryOutput } from "../lib/server/validate";
+import { countNeedsCheck } from "../lib/draft";
+import { buildDownloadHtml, escapeHtml } from "../lib/export-html";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -129,6 +131,48 @@ const noId = goodOutput();
 noId.identity = { caseNumber: null, debtorName: " ", beneficiaryNames: [], sources: [] };
 const noIdResult = validateSummaryOutput(noId, input);
 check("사건번호·이름이 모두 없으면 입력 요청", noIdResult.ok && noIdResult.summary.identity.needsUserInput === true);
+
+console.log("\n■ 초안 검사 (PLAN 20~23)");
+if (good.ok) {
+  const summary = good.summary;
+  const baseDraft = {
+    debtor: "서채무",
+    perBeneficiary: [{ disposalId: "d1", beneficiaryAndProperty: "남수익 — 아파트", fraudulentAct: "2025. 8. 30. 매도", claimDraft: "가액배상" }],
+    securedClaim: "보증채무",
+    deadlineReview: "여유 있음",
+    preservation: "가압류 검토",
+    firmOpinionSummary: "법무법인은 소 제기를 검토할 만하다고 봄",
+    attachmentsAndChecks: "등기부",
+  };
+  const okDraft = validateDraftOutput(baseDraft, summary, null, input.sources);
+  check("맞는 초안 통과", okDraft.ok, okDraft.ok ? "" : okDraft.problems.join(" / "));
+  const wrongDate = validateDraftOutput({ ...baseDraft, securedClaim: "2023. 4. 19. 발생" }, summary, null, input.sources);
+  check("원문에 없는 날짜에 [확인 필요]", wrongDate.ok && wrongDate.draft.securedClaim.includes("[확인 필요](원문에 없는 날짜)"));
+  const wrongAmount = validateDraftOutput(
+    { ...baseDraft, perBeneficiary: [{ ...baseDraft.perBeneficiary[0], claimDraft: "27,000,000원 한도" }] },
+    summary,
+    null,
+    input.sources,
+  );
+  check("원문에 없는 금액에 [확인 필요]", wrongAmount.ok && wrongAmount.draft.perBeneficiary[0].claimDraft.includes("[확인 필요](원문에 없는 금액)"));
+  const sameDate = validateDraftOutput({ ...baseDraft, securedClaim: "2025-08-30" }, summary, null, input.sources);
+  check("원문에 있는 날짜는 다른 표기여도 그대로", sameDate.ok && !sameDate.draft.securedClaim.includes("확인 필요"));
+  const missingBeneficiary = validateDraftOutput({ ...baseDraft, perBeneficiary: [] }, summary, null, input.sources);
+  check("처분행위별 칸이 빠지면 막음", !missingBeneficiary.ok);
+  const empty = validateDraftOutput({ ...baseDraft, preservation: " " }, summary, null, input.sources);
+  check("빈 칸이 있으면 막음", !empty.ok);
+  const noDisposal = validateDraftOutput(
+    { ...baseDraft, perBeneficiary: [{ disposalId: "none", beneficiaryAndProperty: NOT_IN_REPLY, fraudulentAct: NOT_IN_REPLY, claimDraft: NOT_IN_REPLY }] },
+    { ...summary, disposals: [] },
+    null,
+    input.sources,
+  );
+  check("처분행위가 없으면 수익자 칸 1개('none')로 통과", noDisposal.ok);
+  check("[확인 필요] 개수는 8번 칸을 빼고 셈", countNeedsCheck({ ...baseDraft, debtor: "[확인 필요] 이름", attachmentsAndChecks: "[확인 필요] a\n[확인 필요] b" }, summary.disposals) === 1);
+  check("HTML 특수문자 처리", escapeHtml(`<script>alert("x")</script>&`) === "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;&amp;");
+  const html = buildDownloadHtml({ createdAt: "2026-10-28", summary, deadlines: null, draft: { ...baseDraft, debtor: "<img src=x onerror=alert(1)>" } });
+  check("내려받은 HTML에 스크립트·태그가 실행되지 않음", !/<script|<img/i.test(html) && html.includes("&lt;img"));
+}
 
 console.log("\n■ 요청 모양 검사");
 check("맞는 요청 통과", ReplyInputSchema.safeParse(input).success);

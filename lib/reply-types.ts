@@ -243,5 +243,6 @@ export interface DownloadBundle {
   createdAt: IsoDate;
   summary: ReplySummary;
   deadlines: DeadlineSummary | null;
-  draft: LawsuitDraft;
+  /** "기타" 유형이면 초안 없이 정리 결과만 담는다 */
+  draft: LawsuitDraft | null;
 }

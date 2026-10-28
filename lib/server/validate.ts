@@ -8,14 +8,19 @@ import {
   CHECKLIST_ITEMS,
   MAX_GLOSSARY_SENTENCES,
   MAX_GLOSSARY_TERMS,
+  NEEDS_CHECK,
   NOT_IN_REPLY,
   type ChecklistItemId,
   type CitedText,
+  type DeadlineSummary,
+  type ExtractedSource,
+  type LawsuitDraft,
   type ReplyInput,
   type ReplySummary,
   type SourceLocation,
 } from "../reply-types";
-import type { CitedTextOutput, LocationOutput, SummaryOutput } from "./schemas";
+import { NO_DISPOSAL_ID } from "./prompts";
+import type { CitedTextOutput, DraftOutput, LocationOutput, SummaryOutput } from "./schemas";
 
 export type ValidationResult =
   | { ok: true; summary: ReplySummary }
@@ -202,4 +207,85 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
       typeMismatchWarning: clean(output.typeMismatchWarning),
     },
   };
+}
+
+/* ───────── 초안 검사 ───────── */
+
+const DATE_PATTERN = /(\d{4})\s*(?:[.\-]|년)\s*(\d{1,2})\s*(?:[.\-]|월)\s*(\d{1,2})\s*(?:일|\.)?/g;
+const AMOUNT_PATTERN = /\d[\d,]*(?:\s*(?:억|천만|백만|만|천)\s*\d*[\d,]*)*\s*원/g;
+
+function normalizeDate(y: string, m: string, d: string): string {
+  return `${Number(y)}-${Number(m)}-${Number(d)}`;
+}
+
+function squeeze(text: string): string {
+  return text.replace(/\s+/g, "");
+}
+
+export type DraftValidationResult = { ok: true; draft: LawsuitDraft } | { ok: false; problems: string[] };
+
+/**
+ * 초안 검사. 칸 개수·순서를 확인하고, 원문에 없는 날짜·금액에는 [확인 필요]를 붙인다.
+ * Design Ref: §5.1-4 초안 대조 / PRD: 날짜·금액·당사자 이름은 원문 그대로
+ */
+export function validateDraftOutput(
+  output: DraftOutput,
+  summary: ReplySummary,
+  deadlines: DeadlineSummary | null,
+  sources: ExtractedSource[],
+): DraftValidationResult {
+  const problems: string[] = [];
+  const corpus = sources.flatMap((s) => s.segments.map((seg) => seg.text)).join("\n");
+  const squeezedCorpus = squeeze(corpus);
+
+  // 원문과 코드 계산에 실제로 있는 날짜
+  const knownDates = new Set<string>();
+  for (const m of corpus.matchAll(DATE_PATTERN)) knownDates.add(normalizeDate(m[1], m[2], m[3]));
+  for (const d of [...summary.disposals.map((x) => x.legalActDate), ...(deadlines?.perDisposal ?? []).flatMap((x) => [x.oneYearEnd, x.fiveYearEnd, x.deadline])]) {
+    if (d) {
+      const [y, mo, da] = d.split("-");
+      knownDates.add(normalizeDate(y, mo, da));
+    }
+  }
+
+  const markUnknownFacts = (text: string): string =>
+    text
+      .replace(DATE_PATTERN, (match, y, m, d) =>
+        knownDates.has(normalizeDate(y, m, d)) ? match : `${match} ${NEEDS_CHECK}(원문에 없는 날짜)`,
+      )
+      .replace(AMOUNT_PATTERN, (match) =>
+        squeezedCorpus.includes(squeeze(match)) ? match : `${match} ${NEEDS_CHECK}(원문에 없는 금액)`,
+      );
+
+  const field = (where: string, value: string): string => {
+    const text = value.trim();
+    if (!text) problems.push(`${where}: 비어 있음`);
+    return markUnknownFacts(text);
+  };
+
+  const expectedIds = summary.disposals.length > 0 ? summary.disposals.map((d) => d.id) : [NO_DISPOSAL_ID];
+  const byId = new Map(output.perBeneficiary.map((p) => [p.disposalId, p]));
+  if (output.perBeneficiary.length !== expectedIds.length || expectedIds.some((id) => !byId.has(id))) {
+    problems.push(`수익자별 칸: 처분행위(${expectedIds.join(",")})마다 하나씩이어야 함 (받은 것: ${output.perBeneficiary.map((p) => p.disposalId).join(",") || "없음"})`);
+  }
+
+  const draft: LawsuitDraft = {
+    debtor: field("1. 채무자", output.debtor),
+    perBeneficiary: expectedIds.map((id, i) => {
+      const p = byId.get(id);
+      return {
+        disposalId: id,
+        beneficiaryAndProperty: field(`1. 수익자 ${i + 1}`, p?.beneficiaryAndProperty ?? ""),
+        fraudulentAct: field(`3. 수익자 ${i + 1}`, p?.fraudulentAct ?? ""),
+        claimDraft: field(`5. 수익자 ${i + 1}`, p?.claimDraft ?? ""),
+      };
+    }),
+    securedClaim: field("2", output.securedClaim),
+    deadlineReview: field("4", output.deadlineReview),
+    preservation: field("6", output.preservation),
+    firmOpinionSummary: field("7", output.firmOpinionSummary),
+    attachmentsAndChecks: field("8", output.attachmentsAndChecks),
+  };
+
+  return problems.length > 0 ? { ok: false, problems } : { ok: true, draft };
 }

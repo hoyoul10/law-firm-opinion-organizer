@@ -8,7 +8,9 @@ import {
   NEEDS_CHECK,
   NOT_IN_REPLY,
   type ExtractedSource,
+  type DeadlineSummary,
   type LawsuitType,
+  type ReplySummary,
 } from "../reply-types";
 
 /** 원문을 꼬리표가 붙은 줄들로 바꾼다. 쪽이 없는 원문(.hwpx·이메일)은 쪽 자리에 "-" */
@@ -70,4 +72,69 @@ glossary: 회신 원문에 글자 그대로 나온 법률 용어 가운데 담�
 typeMismatchWarning: 담당자가 고른 소송 유형은 "${lawsuitType === "fraudulent-transfer" ? "사해행위취소" : "기타"}"이다. 회신 내용이 이 유형과 달라 보이면 그 이유를 한 문장으로, 아니면 null.
 
 모든 글은 한국어로 쓴다.`;
+}
+
+/* ───────── 초안 ───────── */
+
+/** 처분행위가 하나도 없을 때 수익자 칸 1개에 쓰는 id (Design Ref: §3.1 ③ 초안) */
+export const NO_DISPOSAL_ID = "none";
+
+export function draftInstructions(): string {
+  return `너는 소송업무 담당자가 법무법인에 보낼 "사해행위취소 소송 의뢰 초안"을 만드는 도우미다.
+입력으로 (1) 정리 결과 JSON, (2) 코드로 계산한 제척기간, (3) 회신 원문이 온다.
+
+[초안 8항목 — 순서 고정]
+1. 사건 개요: debtor(채무자) + perBeneficiary[].beneficiaryAndProperty(수익자·전득자와 대상 재산)
+2. 피보전채권 내용: securedClaim (한 번만)
+3. 사해행위 내용과 일자: perBeneficiary[].fraudulentAct
+4. 제척기간 검토 결과: deadlineReview
+5. 청구취지(안): perBeneficiary[].claimDraft (사해행위 취소와 원상회복 방법: 원물반환 또는 가액배상)
+6. 보전처분 필요 여부: preservation
+7. 법무법인 의견 요약: firmOpinionSummary
+8. 첨부서류 목록과 ${NEEDS_CHECK} 사항: attachmentsAndChecks
+
+[수익자별 반복]
+- perBeneficiary는 정리 결과의 처분행위(disposals)마다 1개씩, 같은 순서로, disposalId에 그 처분행위의 id를 그대로 쓴다.
+- 처분행위가 하나도 없으면 perBeneficiary를 1개만 만들고 disposalId는 "${NO_DISPOSAL_ID}", 세 칸은 모두 "${NOT_IN_REPLY}".
+
+[규칙]
+- 정리 결과와 회신 원문에 있는 사실만 쓴다. 없는 사실을 만들지 않는다.
+- 날짜·금액·당사자 이름은 회신 원문 표기를 글자 그대로 옮긴다 (예: "2025. 3. 14.", "50,000,000원"). 바꾸거나 반올림하지 않는다.
+- 회신이 아예 다루지 않은 항목은 정확히 "${NOT_IN_REPLY}"로 쓴다.
+- 회신이 다루었지만 확신할 수 없는 부분은 그 문장 앞에 "${NEEDS_CHECK}"를 붙인다. 점검 결과가 "불명확"인 내용도 ${NEEDS_CHECK}로 표시한다.
+- deadlineReview는 입력의 "제척기간 계산" 줄을 그대로 근거로 쓴다. 날짜 계산을 새로 하지 않는다.
+- 승소 가능성이나 소 제기 여부를 스스로 판단하지 않는다. 그런 내용은 7번에 "법무법인은 ~라고 봄"으로만 쓴다.
+- 8번에는 회신이 요청한 서류 목록과, 초안 전체에서 ${NEEDS_CHECK}를 붙인 사항을 한 줄씩 모아 적는다.
+- 공문서처럼 간결한 한국어로 쓴다. 각 칸은 1~4문장.`;
+}
+
+export function draftInput(
+  summary: ReplySummary,
+  deadlines: DeadlineSummary | null,
+  sources: ExtractedSource[],
+): string {
+  const LEVEL_TEXT = { ok: "여유 있음", warning: "90일 이하로 임박", expired: "제척기간 경과 가능성", "needs-check": NEEDS_CHECK } as const;
+  const deadlineLines =
+    deadlines && deadlines.perDisposal.length > 0
+      ? deadlines.perDisposal
+          .map((d) => {
+            const disposal = summary.disposals.find((x) => x.id === d.disposalId);
+            const name = disposal ? `${disposal.kind}(수익자 ${disposal.beneficiary})` : d.disposalId;
+            return `- ${name}: 1년 기한 ${d.oneYearEnd ?? "담당자가 취소원인을 안 날을 입력하지 않음"}, 5년 기한 ${d.fiveYearEnd ?? "법률행위 일자 없음"}, 적용 기한 ${d.deadline ?? NEEDS_CHECK}, 남은 일수 ${d.daysLeft ?? NEEDS_CHECK}, 판정 ${LEVEL_TEXT[d.level]}`;
+          })
+          .join("\n")
+      : `- 처분행위가 없어 계산하지 못함 ${NEEDS_CHECK}`;
+  const { lawsuitType: _type, glossary: _glossary, ...rest } = summary;
+  void _type;
+  void _glossary;
+  return `## 정리 결과
+${JSON.stringify(rest)}
+
+## 제척기간 계산 (코드로 계산한 값)
+1년 기한이 날짜로 적혀 있으면 담당자가 '취소원인을 안 날'을 이미 입력해 계산한 것이다. 그 경우 안 날을 [확인 필요]로 적지 않는다.
+deadlineReview에는 처분행위 id(d1 등) 대신 처분행위 종류와 수익자 이름으로 적는다.
+${deadlineLines}
+
+## 회신 원문
+${tagSources(sources)}`;
 }

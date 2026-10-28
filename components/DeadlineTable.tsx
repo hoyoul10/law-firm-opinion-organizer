@@ -1,13 +1,8 @@
 // ② 제척기간 표: 처분행위별 + 가장 짧은 기한 경고 (Design Ref: §3.1)
 // 90일 이하 노랑, 0일 이하 빨강, 날짜가 없으면 회색 [확인 필요]. 계산은 lib/deadline.ts (코드)
 
-import {
-  NEEDS_CHECK,
-  type DeadlineLevel,
-  type DeadlineResult,
-  type DeadlineSummary,
-  type Disposal,
-} from "@/lib/reply-types";
+import { deadlineMessage } from "@/lib/labels";
+import { NEEDS_CHECK, type DeadlineLevel, type DeadlineSummary, type Disposal } from "@/lib/reply-types";
 
 export const LEVEL_STYLE: Record<DeadlineLevel, string> = {
   ok: "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
@@ -15,15 +10,6 @@ export const LEVEL_STYLE: Record<DeadlineLevel, string> = {
   expired: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
   "needs-check": "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
 };
-
-export function deadlineMessage(r: DeadlineResult): string {
-  if (r.level === "needs-check" || r.daysLeft === null) {
-    return `${NEEDS_CHECK} 취소원인을 안 날과 법률행위 일자가 모두 있어야 남은 일수를 계산할 수 있어요`;
-  }
-  if (r.level === "expired") return `제척기간 경과 가능성 (기한 ${r.deadline}, ${Math.abs(r.daysLeft)}일 지남)`;
-  if (r.level === "warning") return `기한이 ${r.daysLeft}일 남았어요 (${r.deadline})`;
-  return `기한 ${r.deadline}까지 ${r.daysLeft}일 남았어요`;
-}
 
 interface Props {
   deadlines: DeadlineSummary;

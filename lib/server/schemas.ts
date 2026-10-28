@@ -92,3 +92,84 @@ export const SummaryOutputSchema = z.object({
 export type SummaryOutput = z.infer<typeof SummaryOutputSchema>;
 export type LocationOutput = z.infer<typeof LocationSchema>;
 export type CitedTextOutput = z.infer<typeof CitedTextSchema>;
+
+/* ───────── 초안 ───────── */
+
+const SourceLocationSchema = z.object({
+  fileName: z.string(),
+  page: z.number().int().optional(),
+  paragraph: z.number().int().optional(),
+});
+
+const CitedSchema = z.object({ text: z.string(), sources: z.array(SourceLocationSchema) });
+
+/** 화면이 돌려보내는 정리 결과 (검사를 통과했던 ReplySummary) */
+const ReplySummarySchema = z.object({
+  lawsuitType: z.enum(["fraudulent-transfer", "other"]),
+  identity: z.object({
+    caseNumber: z.string().nullable(),
+    debtorName: z.string().nullable(),
+    beneficiaryNames: z.array(z.string()),
+    needsUserInput: z.boolean(),
+    manualLabel: z.string().nullable(),
+    sources: z.array(SourceLocationSchema),
+  }),
+  firmName: z.string().nullable(),
+  issues: z.array(z.object({ title: z.string(), detail: CitedSchema })),
+  firmOpinion: CitedSchema,
+  disposals: z.array(
+    z.object({
+      id: z.string(),
+      kind: z.string(),
+      beneficiary: z.string(),
+      subsequentAcquirer: z.string().nullable(),
+      property: z.string(),
+      legalActDate: IsoDateSchema.nullable(),
+      sources: z.array(SourceLocationSchema),
+    }),
+  ),
+  checklist: z
+    .array(z.object({ id: z.number().int(), status: z.enum(["present", "not-in-reply", "unclear"]), summary: CitedSchema }))
+    .nullable(),
+  glossary: z.array(z.object({ term: z.string(), explanation: z.string(), firstSeen: SourceLocationSchema })),
+  typeMismatchWarning: z.string().nullable(),
+});
+
+const DeadlineResultSchema = z.object({
+  disposalId: z.string(),
+  oneYearEnd: IsoDateSchema.nullable(),
+  fiveYearEnd: IsoDateSchema.nullable(),
+  deadline: IsoDateSchema.nullable(),
+  daysLeft: z.number().int().nullable(),
+  level: z.enum(["ok", "warning", "expired", "needs-check"]),
+});
+
+/** POST /api/draft 요청. 사해행위취소만, 사건 표시가 정해져 있어야 한다 */
+export const DraftRequestSchema = z
+  .object({
+    summary: ReplySummarySchema,
+    deadlines: z.object({ perDisposal: z.array(DeadlineResultSchema), shortest: DeadlineResultSchema.nullable() }).nullable(),
+    sources: z.array(ExtractedSourceSchema).min(1),
+  })
+  .refine((r) => r.summary.lawsuitType === "fraudulent-transfer", "초안은 사해행위취소 전용이에요")
+  .refine((r) => !r.summary.identity.needsUserInput || Boolean(r.summary.identity.manualLabel), "사건 표시가 필요해요");
+
+/** AI가 돌려주는 초안 8항목 (1번 일부·3번·5번은 수익자별) */
+export const DraftOutputSchema = z.object({
+  debtor: z.string(),
+  perBeneficiary: z.array(
+    z.object({
+      disposalId: z.string(),
+      beneficiaryAndProperty: z.string(),
+      fraudulentAct: z.string(),
+      claimDraft: z.string(),
+    }),
+  ),
+  securedClaim: z.string(),
+  deadlineReview: z.string(),
+  preservation: z.string(),
+  firmOpinionSummary: z.string(),
+  attachmentsAndChecks: z.string(),
+});
+
+export type DraftOutput = z.infer<typeof DraftOutputSchema>;
