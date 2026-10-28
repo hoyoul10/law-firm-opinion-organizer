@@ -42,3 +42,6 @@ next-env.d.ts
 
 # bkit plugin state
 /.bkit/
+
+# 삭제 대기 파일 (사용자가 직접 확인 후 삭제)
+/trash-can/
