@@ -2,7 +2,7 @@
 // Design Ref: §7 보안 — 이 파일이 화면 쪽 코드에 섞이면 server-only가 만들 때 막는다
 
 import "server-only";
-import OpenAI, { APIConnectionTimeoutError } from "openai";
+import OpenAI, { APIConnectionTimeoutError, APIError } from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import type { z } from "zod";
 import type { ApiErrorCode } from "../api-errors";
@@ -39,7 +39,11 @@ function getReasoningEffort(): ReasoningEffort {
 
 /** AI 호출 실패. code는 화면 안내 문구와 이어진다 (lib/api-errors.ts) */
 export class AiCallError extends Error {
-  constructor(public readonly code: Extract<ApiErrorCode, "AI_TIMEOUT" | "AI_FAILED" | "INVALID_AI_OUTPUT">) {
+  constructor(
+    public readonly code: Extract<ApiErrorCode, "AI_TIMEOUT" | "AI_FAILED" | "INVALID_AI_OUTPUT">,
+    /** OpenAI가 돌려준 HTTP 상태 숫자 (있을 때만) */
+    public readonly status?: number,
+  ) {
     super(code);
     this.name = "AiCallError";
   }
@@ -62,6 +66,8 @@ export async function requestStructured<S extends z.ZodType>(options: {
       input: options.input,
       text: { format: zodTextFormat(options.schema, options.schemaName) },
       reasoning: { effort: getReasoningEffort() },
+      // 한 번 호출의 출력 비용 상한 (생각 토큰 포함). 샘플 실측이 수천 토큰이라 넉넉히 잡았다
+      max_output_tokens: MAX_OUTPUT_TOKENS,
       store: false,
     });
     if (response.output_parsed == null) throw new AiCallError("INVALID_AI_OUTPUT");
@@ -69,8 +75,13 @@ export async function requestStructured<S extends z.ZodType>(options: {
   } catch (err) {
     if (err instanceof AiCallError) throw err;
     if (err instanceof APIConnectionTimeoutError) throw new AiCallError("AI_TIMEOUT");
-    // 모양이 틀린 JSON을 읽다가 난 오류
-    if (err instanceof SyntaxError || (err as Error)?.name === "ZodError") throw new AiCallError("INVALID_AI_OUTPUT");
-    throw new AiCallError("AI_FAILED");
+    // 모양이 틀린 JSON을 읽다가 난 오류 (출력 상한에 걸려 잘린 경우 포함)
+    if (err instanceof SyntaxError || (err as Error)?.name === "ZodError" || (err as Error)?.name === "LengthFinishReasonError") {
+      throw new AiCallError("INVALID_AI_OUTPUT");
+    }
+    // 키 오류(401)·한도 초과(429)를 운영 중에 구분할 수 있게 상태 숫자만 남긴다 (내용은 남기지 않음)
+    throw new AiCallError("AI_FAILED", err instanceof APIError ? err.status : undefined);
   }
 }
+
+const MAX_OUTPUT_TOKENS = 24_000;

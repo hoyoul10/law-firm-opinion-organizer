@@ -16,20 +16,20 @@ const IsoDateSchema = z.string().refine(isIsoDate, "YYYY-MM-DD 형식의 날짜�
 const TextSegmentSchema = z.object({
   page: z.number().int().min(1).optional(),
   paragraph: z.number().int().min(1),
-  text: z.string(),
+  text: z.string().max(20_000),
 });
 
 export const ExtractedSourceSchema = z.object({
-  fileName: z.string().trim().min(1),
+  fileName: z.string().trim().min(1).max(200),
   kind: z.enum(["pdf", "hwpx", "email"]),
   round: z.union([z.literal(1), z.literal(2)]),
-  segments: z.array(TextSegmentSchema).min(1),
+  segments: z.array(TextSegmentSchema).min(1).max(5_000),
 });
 
 /** POST /api/summarize 요청 */
 export const ReplyInputSchema = z.object({
   lawsuitType: z.enum(["fraudulent-transfer", "other"]),
-  sources: z.array(ExtractedSourceSchema).min(1),
+  sources: z.array(ExtractedSourceSchema).min(1).max(30),
   cancellationKnownDate: IsoDateSchema.nullable().refine(
     (d) => d === null || !isAfter(d, todayInSeoul()),
     "취소원인을 안 날은 오늘 이후일 수 없어요",
@@ -149,7 +149,7 @@ export const DraftRequestSchema = z
   .object({
     summary: ReplySummarySchema,
     deadlines: z.object({ perDisposal: z.array(DeadlineResultSchema), shortest: DeadlineResultSchema.nullable() }).nullable(),
-    sources: z.array(ExtractedSourceSchema).min(1),
+    sources: z.array(ExtractedSourceSchema).min(1).max(30),
   })
   .refine((r) => r.summary.lawsuitType === "fraudulent-transfer", "초안은 사해행위취소 전용이에요")
   .refine((r) => !r.summary.identity.needsUserInput || Boolean(r.summary.identity.manualLabel), "사건 표시가 필요해요");

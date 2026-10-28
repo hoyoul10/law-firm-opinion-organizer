@@ -212,7 +212,10 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
 /* ───────── 초안 검사 ───────── */
 
 const DATE_PATTERN = /(\d{4})\s*(?:[.\-]|년)\s*(\d{1,2})\s*(?:[.\-]|월)\s*(\d{1,2})\s*(?:일|\.)?/g;
-const AMOUNT_PATTERN = /\d[\d,]*(?:\s*(?:억|천만|백만|만|천)\s*\d*[\d,]*)*\s*원/g;
+// 단위는 한 글자씩만 반복하고 숫자·단위·공백이 겹치지 않게 해, 긴 입력에서 검사 시간이 폭증하지 않게 한다 (보안 점검 SEC-002)
+const AMOUNT_PATTERN = /\d[\d,]*(?:\s*[억천백만](?:\s*\d[\d,]*)?)*\s*원/g;
+/** 초안 한 칸의 최대 글자 수. 넘으면 검사하지 않고 막는다 */
+const MAX_DRAFT_FIELD_CHARS = 4_000;
 
 function normalizeDate(y: string, m: string, d: string): string {
   return `${Number(y)}-${Number(m)}-${Number(d)}`;
@@ -260,6 +263,10 @@ export function validateDraftOutput(
   const field = (where: string, value: string): string => {
     const text = value.trim();
     if (!text) problems.push(`${where}: 비어 있음`);
+    if (text.length > MAX_DRAFT_FIELD_CHARS) {
+      problems.push(`${where}: 너무 김`);
+      return text.slice(0, MAX_DRAFT_FIELD_CHARS);
+    }
     return markUnknownFacts(text);
   };
 

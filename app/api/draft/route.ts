@@ -3,7 +3,7 @@
 
 import { AiCallError, requestStructured } from "@/lib/server/openai";
 import { draftInput, draftInstructions } from "@/lib/server/prompts";
-import { errorResponse, logFailure } from "@/lib/server/respond";
+import { errorResponse, logFailure, rejectForeignRequest } from "@/lib/server/respond";
 import { DraftOutputSchema, DraftRequestSchema } from "@/lib/server/schemas";
 import { validateDraftOutput } from "@/lib/server/validate";
 import type { DraftRequest } from "@/lib/reply-types";
@@ -14,6 +14,9 @@ export const maxDuration = 120;
 const MAX_CHARS = 80_000;
 
 export async function POST(request: Request) {
+  const rejected = rejectForeignRequest(request);
+  if (rejected) return rejected;
+
   const parsed = DraftRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return errorResponse("INVALID_INPUT");
 
@@ -41,7 +44,7 @@ export async function POST(request: Request) {
     return Response.json({ draft: result.draft });
   } catch (err) {
     const code = err instanceof AiCallError ? err.code : "AI_FAILED";
-    logFailure("draft", code, { chars: input.length });
+    logFailure("draft", code, { chars: input.length, status: err instanceof AiCallError ? err.status : undefined });
     return errorResponse(code);
   }
 }

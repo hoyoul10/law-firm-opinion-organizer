@@ -169,6 +169,11 @@ if (good.ok) {
   );
   check("처분행위가 없으면 수익자 칸 1개('none')로 통과", noDisposal.ok);
   check("[확인 필요] 개수는 8번 칸을 빼고 셈", countNeedsCheck({ ...baseDraft, debtor: "[확인 필요] 이름", attachmentsAndChecks: "[확인 필요] a\n[확인 필요] b" }, summary.disposals) === 1);
+  const t0 = Date.now();
+  validateDraftOutput({ ...baseDraft, securedClaim: "1억".repeat(1_999) }, summary, null, input.sources);
+  validateDraftOutput({ ...baseDraft, securedClaim: "1천만 ".repeat(999) }, summary, null, input.sources);
+  check("금액 검사가 긴 악성 입력에서도 빨리 끝남 (보안 SEC-002)", Date.now() - t0 < 1_000, `${Date.now() - t0}ms`);
+  check("너무 긴 칸은 막음", !validateDraftOutput({ ...baseDraft, securedClaim: "가".repeat(4_001) }, summary, null, input.sources).ok);
   check("HTML 특수문자 처리", escapeHtml(`<script>alert("x")</script>&`) === "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;&amp;");
   const html = buildDownloadHtml({ createdAt: "2026-10-28", summary, deadlines: null, draft: { ...baseDraft, debtor: "<img src=x onerror=alert(1)>" } });
   check("내려받은 HTML에 스크립트·태그가 실행되지 않음", !/<script|<img/i.test(html) && html.includes("&lt;img"));

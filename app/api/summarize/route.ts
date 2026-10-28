@@ -3,7 +3,7 @@
 
 import { AiCallError, requestStructured } from "@/lib/server/openai";
 import { summarizeInstructions, tagSources } from "@/lib/server/prompts";
-import { errorResponse, logFailure } from "@/lib/server/respond";
+import { errorResponse, logFailure, rejectForeignRequest } from "@/lib/server/respond";
 import { ReplyInputSchema, SummaryOutputSchema } from "@/lib/server/schemas";
 import { validateSummaryOutput } from "@/lib/server/validate";
 import type { ReplyInput } from "@/lib/reply-types";
@@ -14,6 +14,9 @@ export const maxDuration = 120;
 const MAX_CHARS = 50_000;
 
 export async function POST(request: Request) {
+  const rejected = rejectForeignRequest(request);
+  if (rejected) return rejected;
+
   const parsed = ReplyInputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return errorResponse("INVALID_INPUT");
 
@@ -42,7 +45,7 @@ export async function POST(request: Request) {
     return Response.json({ summary: result.summary });
   } catch (err) {
     const code = err instanceof AiCallError ? err.code : "AI_FAILED";
-    logFailure("summarize", code, { chars: tagged.length });
+    logFailure("summarize", code, { chars: tagged.length, status: err instanceof AiCallError ? err.status : undefined });
     return errorResponse(code);
   }
 }

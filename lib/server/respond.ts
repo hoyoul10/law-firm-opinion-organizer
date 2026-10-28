@@ -18,8 +18,29 @@ export function errorResponse(code: ApiErrorCode): Response {
   return Response.json(body, { status: STATUS[code] });
 }
 
-/** 내용 없이 오류 종류만 기록한다 */
-export function logFailure(route: string, code: ApiErrorCode, detail: { chars?: number; problems?: number } = {}) {
-  const parts = Object.entries(detail).map(([k, v]) => `${k}=${v}`);
+/** 내용 없이 오류 종류만 기록한다. status는 OpenAI 상태 숫자(401 키 오류, 429 한도 초과 등) */
+export function logFailure(
+  route: string,
+  code: ApiErrorCode,
+  detail: { chars?: number; problems?: number; status?: number } = {},
+) {
+  const parts = Object.entries(detail)
+    .filter(([, v]) => v !== undefined)
+    .map(([k, v]) => `${k}=${v}`);
   console.error(`[${route}] ${code}${parts.length ? " " + parts.join(" ") : ""}`);
+}
+
+/**
+ * 다른 사이트의 화면에서 몰래 보내는 요청을 막는다 (보안 점검 SEC-001 일부).
+ * JSON이 아니거나, 브라우저가 알려 준 출처가 이 서버가 아니면 거절한다.
+ * curl 같은 직접 호출은 이것만으로 막을 수 없어 Vercel 접근 보호·요청 횟수 제한이 따로 필요하다.
+ */
+export function rejectForeignRequest(request: Request): Response | null {
+  if (!request.headers.get("content-type")?.includes("application/json")) return errorResponse("INVALID_INPUT");
+  const origin = request.headers.get("origin");
+  if (origin) {
+    const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+    if (!host || new URL(origin).host !== host) return errorResponse("INVALID_INPUT");
+  }
+  return null;
 }

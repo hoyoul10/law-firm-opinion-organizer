@@ -69,7 +69,11 @@ disposals: 채무자 본인이 한 처분행위(매매, 증여, 근저당권설�
   - 예: "채무자 A가 B에게 팔고, B가 다시 C에게 팔았다" → 처분행위는 1개(beneficiary B, subsequentAcquirer C). kind는 원문 표현, beneficiary는 수익자, subsequentAcquirer는 전득자(없으면 null), property는 대상 재산, legalActDate는 법률행위(계약) 일자(없으면 null).
 ${checklistRule}
 glossary: 회신 원문에 글자 그대로 나온 법률 용어 가운데 담당자가 헷갈리기 쉬운 것을 처음 나온 순서대로 최대 ${MAX_GLOSSARY_TERMS}개 고른다. 원문에 없는 용어는 넣지 않는다. explanation은 일상어로 2문장 이내. firstSeen은 그 용어가 처음 나온 위치.
-typeMismatchWarning: 담당자가 고른 소송 유형은 "${lawsuitType === "fraudulent-transfer" ? "사해행위취소" : "기타"}"이다. 회신 내용이 이 유형과 달라 보이면 그 이유를 한 문장으로, 아니면 null.
+typeMismatchWarning: ${
+    lawsuitType === "fraudulent-transfer"
+      ? `담당자는 소송 유형을 "사해행위취소"로 골랐다. 회신이 사해행위취소가 아닌 다른 소송(대여금, 손해배상 등)을 다루면 그 이유를 한 문장으로, 아니면 null.`
+      : `담당자는 소송 유형을 "기타"(사해행위취소가 아닌 모든 소송)로 골랐다. 회신이 사해행위취소를 다룰 때만 그 이유를 한 문장으로 적고, 그 밖의 소송이면 null.`
+  }
 
 모든 글은 한국어로 쓴다.`;
 }
