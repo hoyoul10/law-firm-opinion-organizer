@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:ai-output": "tsc -p scripts/tsconfig.json && node --conditions=react-server node_modules/.cache/check-scripts/scripts/check-ai-output.js"
   },
   "dependencies": {
     "jszip": "^3.10.2",

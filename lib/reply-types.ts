@@ -27,18 +27,25 @@ export type SourceKind = "pdf" | "hwpx" | "email";
 export interface TextSegment {
   /** PDF만 있음 (1부터) */
   page?: number;
-  /** 파일 안 문단 번호 (1부터). 이메일 본문도 문단 번호로 센다 */
+  /** 문단 번호 (1부터). PDF는 그 쪽 안에서 센 번호, .hwpx·이메일은 파일 전체에서 센 번호 (Design Ref: §4.1) */
   paragraph: number;
   text: string;
 }
+
+/** 1차 회신 / 2차 보완 회신 */
+export type ReplyRound = 1 | 2;
 
 /** 파일 하나(또는 이메일 본문)에서 뽑은 글자 */
 export interface ExtractedSource {
   /** 이메일 본문은 "이메일 본문"으로 적는다 */
   fileName: string;
   kind: SourceKind;
+  round: ReplyRound;
   segments: TextSegment[];
 }
+
+/** 이메일 본문을 가리킬 때 쓰는 파일 이름 */
+export const EMAIL_SOURCE_NAME = "이메일 본문";
 
 /** 담당자가 한 번에 올리는 회신 1건 (파일 여러 개 + 이메일 본문, 1차·2차 회신 포함) */
 export interface ReplyInput {
@@ -46,8 +53,6 @@ export interface ReplyInput {
   sources: ExtractedSource[];
   /** 취소원인을 안 날. 오늘 이후 날짜는 받지 않는다. 비어 있으면 null */
   cancellationKnownDate: IsoDate | null;
-  /** 사건번호·채무자명·수익자명을 찾지 못했을 때 담당자가 직접 넣은 값 */
-  manualCaseLabel?: string;
 }
 
 /* ───────── 원문 위치 ───────── */
@@ -73,6 +78,10 @@ export interface CaseIdentity {
   beneficiaryNames: string[];
   /** 사건번호·채무자명·수익자명이 모두 없으면 true */
   needsUserInput: boolean;
+  /** needsUserInput일 때 담당자가 화면에서 직접 넣은 사건 표시. 초안·HTML에도 그대로 쓴다 */
+  manualLabel: string | null;
+  /** 사건번호·이름을 찾은 원문 위치 */
+  sources: SourceLocation[];
 }
 
 export interface Issue {
@@ -221,6 +230,13 @@ export interface LawsuitDraft {
 }
 
 /* ───────── 내려받기 ───────── */
+
+/** POST /api/draft 요청. 날짜·금액·이름을 원문과 대조하려고 원문 글자도 함께 보낸다 */
+export interface DraftRequest {
+  summary: ReplySummary;
+  deadlines: DeadlineSummary | null;
+  sources: ExtractedSource[];
+}
 
 /** HTML 파일 하나에 담는 전체 결과 */
 export interface DownloadBundle {
