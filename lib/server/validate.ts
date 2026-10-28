@@ -94,7 +94,9 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
 
   /** "회신에 없음"이면 원문 위치가 없어야 하고, 그 밖의 글은 원문 위치가 있어야 한다 */
   const checkCited = (where: string, cited: CitedTextOutput): CitedText => {
-    const text = cited.text.trim();
+    let text = cited.text.trim();
+    // "회신에 없음." 처럼 끝에 문장부호만 붙은 경우는 정확한 표시로 맞춘다
+    if (cited.sources.length === 0 && /^회신에 없음[.。]?$/.test(text)) text = NOT_IN_REPLY;
     const isMissing = text === NOT_IN_REPLY;
     if (!text) problems.push(`${where}: 내용이 비어 있음`);
     if (isMissing && cited.sources.length > 0) problems.push(`${where}: "${NOT_IN_REPLY}"인데 원문 위치가 있음`);

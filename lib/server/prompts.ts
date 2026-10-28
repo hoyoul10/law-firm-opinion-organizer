@@ -2,7 +2,14 @@
 // Design Ref: §5.1-2 — 문단마다 [파일이름 | 차수 | 쪽 | 문단] 꼬리표를 붙여 원문 위치를 그대로 옮기게 한다
 
 import "server-only";
-import { CHECKLIST_ITEMS, MAX_GLOSSARY_TERMS, NOT_IN_REPLY, type ExtractedSource, type LawsuitType } from "../reply-types";
+import {
+  CHECKLIST_ITEMS,
+  MAX_GLOSSARY_TERMS,
+  NEEDS_CHECK,
+  NOT_IN_REPLY,
+  type ExtractedSource,
+  type LawsuitType,
+} from "../reply-types";
 
 /** 원문을 꼬리표가 붙은 줄들로 바꾼다. 쪽이 없는 원문(.hwpx·이메일)은 쪽 자리에 "-" */
 export function tagSources(sources: ExtractedSource[]): string {
@@ -41,6 +48,11 @@ ${CHECKLIST_LINES}
 
 [지어내기 금지]
 - 회신에 없는 사실을 만들지 않는다. 회신이 다루지 않은 내용은 text를 정확히 "${NOT_IN_REPLY}"로, sources를 빈 배열로 둔다.
+- 회신이 다루기는 했지만 표현이 모호하거나 서로 맞지 않아 확신할 수 없는 내용은 그 글 맨 앞에 "${NEEDS_CHECK}"를 붙이고, 무엇을 확인해야 하는지 함께 적는다. 이때도 근거가 된 위치를 sources에 넣는다.
+
+[1차·2차 회신]
+- 차수가 "2차 보완"인 줄은 같은 사건에 대한 보완 회신이다. 1차에서 보류·부족했던 내용을 2차가 채웠으면 2차 내용을 쓴다.
+- 1차와 2차가 같은 항목에 대해 서로 다른 결론을 말하면 2차를 따르되, 글 맨 앞에 "${NEEDS_CHECK}"를 붙이고 1차 내용도 짧게 함께 적는다. sources에는 두 위치를 모두 넣는다.
 - 날짜·금액·당사자 이름은 원문 표기를 그대로 옮긴다. 단 legalActDate만 YYYY-MM-DD로 바꾼다.
 - 승소 가능성, 소 제기 여부 같은 법률 판단을 스스로 하지 않는다. 회신에 그런 판단이 있으면 "법무법인은 ~라고 봄"처럼 법무법인 의견으로만 옮긴다.
 
