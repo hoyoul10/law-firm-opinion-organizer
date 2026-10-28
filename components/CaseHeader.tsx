@@ -1,29 +1,75 @@
-// ② 사건 표시 줄: 사건번호 → 없으면 채무자명·수익자명 (Design Ref: §3.1)
-// 셋 다 없을 때 담당자 입력 칸은 PLAN 14에서 붙인다
+"use client";
 
-import type { ReplySummary } from "@/lib/reply-types";
+// ② 사건 표시 줄: 사건번호 → 없으면 채무자명·수익자명 → 셋 다 없으면 담당자 입력 (Design Ref: §3.1)
+// 입력한 값은 정리 결과의 identity.manualLabel에 들어가 초안·HTML에도 그대로 쓴다
+
+import { useState } from "react";
+import type { CaseIdentity, ReplySummary } from "@/lib/reply-types";
 import SourceBadge from "./SourceBadge";
 
-export default function CaseHeader({ summary }: { summary: ReplySummary }) {
-  const { identity, firmName } = summary;
+/** 화면·초안·HTML에서 함께 쓰는 사건 표시 글 */
+export function caseLabel(identity: CaseIdentity): string {
+  if (identity.manualLabel) return identity.manualLabel;
   const items: string[] = [];
   if (identity.caseNumber) items.push(`사건 ${identity.caseNumber}`);
   if (identity.debtorName) items.push(`채무자 ${identity.debtorName}`);
   if (!identity.caseNumber && identity.beneficiaryNames.length > 0) {
     items.push(`수익자 ${identity.beneficiaryNames.join(", ")}`);
   }
-  if (firmName) items.push(firmName);
+  return items.join(" · ");
+}
+
+interface Props {
+  summary: ReplySummary;
+  onManualLabel: (label: string | null) => void;
+}
+
+export default function CaseHeader({ summary, onManualLabel }: Props) {
+  const { identity, firmName } = summary;
+  const [draft, setDraft] = useState("");
+
+  if (identity.needsUserInput && !identity.manualLabel) {
+    return (
+      <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-950">
+        <p className="mb-2 font-medium text-amber-800 dark:text-amber-200">
+          ⚠ 회신에서 사건번호·채무자명·수익자명을 찾지 못했어요. 이 회신이 어느 사건인지 직접 적어 주세요.
+        </p>
+        <form
+          className="flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (draft.trim()) onManualLabel(draft.trim());
+          }}
+        >
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="예: 2026-사해-0140 또는 채무자 홍길동"
+            aria-label="사건 표시 직접 입력"
+            className="min-w-60 flex-1 rounded border border-black/15 bg-white px-3 py-1.5 dark:border-white/20 dark:bg-zinc-900"
+          />
+          <button type="submit" className="rounded bg-amber-700 px-3 py-1.5 font-medium text-white">
+            사건 표시 정하기
+          </button>
+        </form>
+        <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">사건 표시를 정해야 초안을 만들 수 있어요.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-lg bg-zinc-100 px-4 py-3 text-sm dark:bg-zinc-800">
-      {identity.needsUserInput ? (
-        <span className="font-medium text-amber-700 dark:text-amber-400">
-          ⚠ 회신에서 사건번호·채무자명·수익자명을 찾지 못했어요
-        </span>
+    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-zinc-100 px-4 py-3 text-sm dark:bg-zinc-800">
+      <span className="font-semibold">{[caseLabel(identity), firmName].filter(Boolean).join(" · ")}</span>
+      {identity.manualLabel ? (
+        <>
+          <span className="text-xs text-zinc-500">(담당자 직접 입력)</span>
+          <button type="button" className="text-xs text-zinc-500 underline" onClick={() => onManualLabel(null)}>
+            다시 입력
+          </button>
+        </>
       ) : (
-        <span className="font-semibold">{items.join(" · ")}</span>
+        <SourceBadge sources={identity.sources} />
       )}
-      <SourceBadge sources={identity.sources} />
     </div>
   );
 }
