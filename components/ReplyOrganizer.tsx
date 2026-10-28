@@ -2,32 +2,37 @@
 
 // 화면 전체 상태를 가진 부모. ① 입력 → ② 정리 결과 → ③ 초안을 이어 준다.
 // Design Ref: §4.2 — 모든 값은 브라우저 메모리에만 둔다 (저장 안 함)
-// PLAN 9 단계: 이메일 본문을 문단으로 나눠 서버에 보내고, 사건 표시·쟁점·법무법인 의견을 보여 준다.
-// 파일 글자 읽기는 PLAN 11·12에서 붙인다.
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import InputPanel, { EMPTY_INPUT, type InputState } from "./InputPanel";
 import CaseHeader from "./CaseHeader";
 import IssuesAndOpinion from "./IssuesAndOpinion";
 import { API_ERROR_MESSAGES, type ApiErrorBody } from "@/lib/api-errors";
 import { splitEmailBody } from "@/lib/extract/email";
-import type { ReplyInput, ReplySummary } from "@/lib/reply-types";
+import { getToday } from "@/lib/today";
+import type { ExtractedSource, ReplyInput, ReplySummary } from "@/lib/reply-types";
+
+const noSubscribe = () => () => {};
+
+/** 화면 입력을 서버로 보낼 원문 목록으로 바꾼다 (파일 순서 → 이메일 본문) */
+function collectSources(input: InputState): ExtractedSource[] {
+  const sources = input.files.flatMap((f) => (f.result?.ok ? [f.result.source] : []));
+  const email = splitEmailBody(input.emailBody, input.emailRound);
+  return email ? [...sources, email] : sources;
+}
 
 export default function ReplyOrganizer() {
   const [input, setInput] = useState<InputState>(EMPTY_INPUT);
+  // 서버에서 미리 그릴 때는 비워 두고, 브라우저에서 한국 시간 오늘을 읽는다
+  const today = useSyncExternalStore(noSubscribe, getToday, () => "");
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<ReplySummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const summarize = async () => {
-    const email = splitEmailBody(input.emailBody);
-    if (!email) {
-      setError("파일 읽기는 아직 준비 중이에요. 지금은 이메일 본문을 붙여넣어 주세요.");
-      return;
-    }
     const body: ReplyInput = {
       lawsuitType: input.lawsuitType,
-      sources: [email],
+      sources: collectSources(input),
       cancellationKnownDate: input.cancellationKnownDate || null,
     };
 
@@ -55,7 +60,7 @@ export default function ReplyOrganizer() {
 
   return (
     <div className="space-y-6">
-      <InputPanel value={input} onChange={setInput} onSubmit={summarize} busy={busy} />
+      <InputPanel value={input} setValue={setInput} onSubmit={summarize} busy={busy} today={today} />
 
       {error && (
         <div role="alert" className="flex items-center justify-between gap-4 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">

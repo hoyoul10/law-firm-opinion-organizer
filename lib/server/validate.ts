@@ -36,6 +36,10 @@ function locationKey(loc: LocationOutput): string {
   return `${loc.fileName}|${loc.page ?? ""}|${loc.paragraph ?? ""}`;
 }
 
+function formatKey(loc: SourceLocation): string {
+  return `${loc.fileName}|${loc.page ?? ""}|${loc.paragraph ?? ""}`;
+}
+
 function toSourceLocation(loc: LocationOutput): SourceLocation {
   return {
     fileName: loc.fileName,
@@ -84,34 +88,36 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
   const problems: string[] = [];
   const keys = buildLocationKeys(input);
 
-  const checkLocations = (where: string, locs: LocationOutput[]) => {
-    for (const loc of locs) {
-      if (loc.paragraph === null || !keys.has(locationKey(loc))) {
-        problems.push(`${where}: 보낸 원문에 없는 위치 (${loc.fileName} ${loc.page ?? "-"}쪽 ${loc.paragraph ?? "-"}문단)`);
-      }
-    }
-  };
+  /** 보낸 원문에 실제로 있는 위치만 남긴다. 없는 위치는 버리고, 그 결과 비면 각 항목 규칙에서 걸린다 */
+  const validLocations = (locs: LocationOutput[]) =>
+    locs.filter((loc) => loc.paragraph !== null && keys.has(locationKey(loc)));
 
-  /** "회신에 없음"이면 원문 위치가 없어야 하고, 그 밖의 글은 원문 위치가 있어야 한다 */
+  /** "회신에 없음"이면 원문 위치가 없어야 하고, 그 밖의 글은 원문에 실제로 있는 위치가 하나 이상 있어야 한다 */
   const checkCited = (where: string, cited: CitedTextOutput): CitedText => {
     let text = cited.text.trim();
     // "회신에 없음." 처럼 끝에 문장부호만 붙은 경우는 정확한 표시로 맞춘다
     if (cited.sources.length === 0 && /^회신에 없음[.。]?$/.test(text)) text = NOT_IN_REPLY;
     const isMissing = text === NOT_IN_REPLY;
+    const valid = validLocations(cited.sources);
     if (!text) problems.push(`${where}: 내용이 비어 있음`);
     if (isMissing && cited.sources.length > 0) problems.push(`${where}: "${NOT_IN_REPLY}"인데 원문 위치가 있음`);
-    if (!isMissing && text && cited.sources.length === 0) problems.push(`${where}: 원문 위치가 없음`);
-    checkLocations(where, cited.sources);
-    return { text, sources: cited.sources.map(toSourceLocation) };
+    if (!isMissing && text && valid.length === 0) {
+      problems.push(`${where}: 원문 위치가 없음${cited.sources.length ? " (보낸 원문에 없는 위치만 있음)" : ""}`);
+    }
+    return { text, sources: valid.map(toSourceLocation) };
   };
 
-  // 사건 표시
+  // 사건 표시: 원문 위치는 AI 답 대신 서버가 원문에서 이름·번호를 직접 찾아 붙인다
   const caseNumber = clean(output.identity.caseNumber);
   const debtorName = clean(output.identity.debtorName);
   const beneficiaryNames = output.identity.beneficiaryNames.map((n) => n.trim()).filter(Boolean);
   const hasIdentity = Boolean(caseNumber || debtorName || beneficiaryNames.length);
-  if (hasIdentity && output.identity.sources.length === 0) problems.push("사건 표시: 원문 위치가 없음");
-  checkLocations("사건 표시", output.identity.sources);
+  const identitySources: SourceLocation[] = [];
+  for (const value of [caseNumber, debtorName, ...beneficiaryNames]) {
+    const at = value ? findFirst(input, value) : null;
+    if (at && !identitySources.some((s) => formatKey(s) === formatKey(at.location))) identitySources.push(at.location);
+  }
+  if (hasIdentity && identitySources.length === 0) problems.push("사건 표시: 사건번호·이름이 원문에 그대로 없음");
 
   // 쟁점·법무법인 의견
   const issues = output.issues.map((issue, i) => ({
@@ -128,8 +134,8 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
     seenIds.add(d.id);
     const legalActDate = clean(d.legalActDate);
     if (legalActDate && !isIsoDate(legalActDate)) problems.push(`${where}: 법률행위 일자가 YYYY-MM-DD 형식이 아님 (${legalActDate})`);
-    if (d.sources.length === 0) problems.push(`${where}: 원문 위치가 없음`);
-    checkLocations(where, d.sources);
+    const valid = validLocations(d.sources);
+    if (valid.length === 0) problems.push(`${where}: 원문 위치가 없음`);
     return {
       id: d.id,
       kind: d.kind.trim(),
@@ -137,7 +143,7 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
       subsequentAcquirer: clean(d.subsequentAcquirer),
       property: d.property.trim(),
       legalActDate,
-      sources: d.sources.map(toSourceLocation),
+      sources: valid.map(toSourceLocation),
     };
   });
 
@@ -185,7 +191,7 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
         beneficiaryNames,
         needsUserInput: !hasIdentity,
         manualLabel: null,
-        sources: output.identity.sources.map(toSourceLocation),
+        sources: identitySources,
       },
       firmName: clean(output.firmName),
       issues,

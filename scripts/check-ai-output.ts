@@ -98,8 +98,8 @@ expectProblem("점검 항목이 9개", (o) => o.checklist.pop(), "정확히 10�
 expectProblem("점검 번호 순서가 섞임", (o) => o.checklist.reverse(), "정확히 10개");
 expectProblem("'회신에 없음'인데 원문 위치가 있음", (o) => { o.checklist[0].summary = { text: NOT_IN_REPLY, sources: [pdf(1, 1)] }; }, "원문 위치가 있음");
 expectProblem("요약은 있는데 원문 위치가 없음", (o) => { o.firmOpinion.sources = []; }, "원문 위치가 없음");
-expectProblem("보낸 원문에 없는 위치", (o) => { o.issues[0].detail.sources = [pdf(5, 9)]; }, "없는 위치");
-expectProblem("이메일에 쪽 번호를 붙임", (o) => { o.firmOpinion.sources = [{ fileName: "이메일 본문", page: 1, paragraph: 1 }]; }, "없는 위치");
+expectProblem("보낸 원문에 없는 위치", (o) => { o.issues[0].detail.sources = [pdf(5, 9)]; }, "없는 위치만 있음");
+expectProblem("이메일에 쪽 번호를 붙임", (o) => { o.firmOpinion.sources = [{ fileName: "이메일 본문", page: 1, paragraph: 1 }]; }, "없는 위치만 있음");
 expectProblem("상태와 요약이 맞지 않음", (o) => { o.checklist[0].status = "present"; }, "맞지 않음");
 expectProblem("용어 풀이 3문장", (o) => { o.glossary[0].explanation = "첫째예요. 둘째예요. 셋째예요."; }, "2문장");
 expectProblem("법률행위 일자 형식 틀림", (o) => { o.disposals[0].legalActDate = "2025. 8. 30."; }, "YYYY-MM-DD");

@@ -8,7 +8,7 @@ import { ReplyInputSchema, SummaryOutputSchema } from "@/lib/server/schemas";
 import { validateSummaryOutput } from "@/lib/server/validate";
 import type { ReplyInput } from "@/lib/reply-types";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 /** 비용 방지용 글자 수 상한 (Design Ref: §7). 실제 길이를 재 본 뒤 조정한다 */
 const MAX_CHARS = 50_000;

@@ -15,9 +15,9 @@ export function getOpenAI(): OpenAI {
   if (!client) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("OPENAI_API_KEY가 설정되지 않았어요");
-    // 응답이 50초 안에 오지 않으면 끊는다 (API 최대 처리 시간 60초 안에서).
+    // 응답이 110초 안에 오지 않으면 끊는다 (API 최대 처리 시간 120초 안에서). medium 생각 수준으로 PDF+이메일 샘플이 40초 가까이 걸려 DESIGN의 50초에서 늘렸다.
     // 다시 요청은 화면의 [다시 시도]에 맡기므로 서버에서는 다시 보내지 않는다 (Design Ref: §5.1-5)
-    client = new OpenAI({ apiKey, timeout: 50_000, maxRetries: 0 });
+    client = new OpenAI({ apiKey, timeout: 110_000, maxRetries: 0 });
   }
   return client;
 }
@@ -30,7 +30,7 @@ type ReasoningEffort = "low" | "medium" | "high";
 
 /**
  * AI가 답하기 전에 얼마나 따져 볼지. 샘플 3 시험에서 기본값은 9초지만 처분행위·점검 상태를 자주 틀렸고,
- * medium은 30초 안팎이지만 정답표와 맞았다. high는 50초 제한을 넘었다. .env의 OPENAI_REASONING_EFFORT로 바꿀 수 있다
+ * medium은 30초 안팎이지만 정답표와 맞았다. high는 60초를 넘었다. .env의 OPENAI_REASONING_EFFORT로 바꿀 수 있다
  */
 function getReasoningEffort(): ReasoningEffort {
   const value = process.env.OPENAI_REASONING_EFFORT;
