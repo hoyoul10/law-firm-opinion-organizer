@@ -135,7 +135,7 @@ export default function InputPanel({ value, onChange, onSubmit, busy }: Props) {
           onClick={onSubmit}
           className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black"
         >
-          {busy ? "정리하는 중…" : "회신 정리하기"}
+          {busy ? "정리하는 중… (30초 안팎)" : "회신 정리하기"}
         </button>
       </div>
     </section>

@@ -1,39 +1,48 @@
 // POST /api/summarize — 회신 정리
-// 지금은 모듈 1(PLAN 7)의 연결 확인 단계: 이메일 본문을 받아 AI가 한 문장으로 답한다.
-// PLAN 9에서 ReplyInput을 받아 requestStructured + validateSummaryOutput으로 ReplySummary를 돌려주도록 바뀐다.
+// Design Ref: §5 — ReplyInput을 받아 AI에게 정리를 맡기고, 검사를 통과한 ReplySummary만 돌려준다
 
-import { z } from "zod";
-import { getModel, getOpenAI } from "@/lib/server/openai";
+import { AiCallError, requestStructured } from "@/lib/server/openai";
+import { summarizeInstructions, tagSources } from "@/lib/server/prompts";
 import { errorResponse, logFailure } from "@/lib/server/respond";
-import { APIConnectionTimeoutError } from "openai";
+import { ReplyInputSchema, SummaryOutputSchema } from "@/lib/server/schemas";
+import { validateSummaryOutput } from "@/lib/server/validate";
+import type { ReplyInput } from "@/lib/reply-types";
 
 export const maxDuration = 60;
 
+/** 비용 방지용 글자 수 상한 (Design Ref: §7). 실제 길이를 재 본 뒤 조정한다 */
 const MAX_CHARS = 50_000;
 
-const RequestSchema = z.object({
-  emailBody: z.string().trim().min(1),
-});
-
 export async function POST(request: Request) {
-  const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
+  const parsed = ReplyInputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return errorResponse("INVALID_INPUT");
 
-  const { emailBody } = parsed.data;
-  if (emailBody.length > MAX_CHARS) return errorResponse("PAYLOAD_TOO_LARGE");
+  const input: ReplyInput = parsed.data;
+  const tagged = tagSources(input.sources);
+  if (tagged.length > MAX_CHARS) return errorResponse("PAYLOAD_TOO_LARGE");
 
   try {
-    const response = await getOpenAI().responses.create({
-      model: getModel(),
-      instructions:
-        "너는 법무법인 검토회신을 읽는 도우미다. 회신의 핵심을 한국어 한 문장으로 요약한다. 회신에 없는 내용은 지어내지 않는다.",
-      input: emailBody,
-      store: false,
+    const output = await requestStructured({
+      schema: SummaryOutputSchema,
+      schemaName: "reply_summary",
+      instructions: summarizeInstructions(input.lawsuitType),
+      input: tagged,
     });
-    return Response.json({ answer: response.output_text.trim() });
+
+    const result = validateSummaryOutput(output, input);
+    if (!result.ok) {
+      logFailure("summarize", "INVALID_AI_OUTPUT", { chars: tagged.length, problems: result.problems.length });
+      // 개발 중에는 어떤 검사에 걸렸는지 화면 개발자 도구에서 볼 수 있게 함께 돌려준다 (서버 로그에는 남기지 않음)
+      const response = errorResponse("INVALID_AI_OUTPUT");
+      if (process.env.NODE_ENV !== "development") return response;
+      const body = await response.json();
+      return Response.json({ ...body, problems: result.problems }, { status: response.status });
+    }
+
+    return Response.json({ summary: result.summary });
   } catch (err) {
-    const code = err instanceof APIConnectionTimeoutError ? "AI_TIMEOUT" : "AI_FAILED";
-    logFailure("summarize", code, { chars: emailBody.length });
+    const code = err instanceof AiCallError ? err.code : "AI_FAILED";
+    logFailure("summarize", code, { chars: tagged.length });
     return errorResponse(code);
   }
 }

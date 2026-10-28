@@ -101,11 +101,26 @@ expectProblem("요약은 있는데 원문 위치가 없음", (o) => { o.firmOpin
 expectProblem("보낸 원문에 없는 위치", (o) => { o.issues[0].detail.sources = [pdf(5, 9)]; }, "없는 위치");
 expectProblem("이메일에 쪽 번호를 붙임", (o) => { o.firmOpinion.sources = [{ fileName: "이메일 본문", page: 1, paragraph: 1 }]; }, "없는 위치");
 expectProblem("상태와 요약이 맞지 않음", (o) => { o.checklist[0].status = "present"; }, "맞지 않음");
-expectProblem("용어 11개", (o) => { o.glossary = Array.from({ length: 11 }, () => ({ ...o.glossary[0] })); }, "10개를 넘음");
 expectProblem("용어 풀이 3문장", (o) => { o.glossary[0].explanation = "첫째예요. 둘째예요. 셋째예요."; }, "2문장");
-expectProblem("용어가 회신 순서와 다름", (o) => { o.glossary.reverse(); }, "순서가 아님");
 expectProblem("법률행위 일자 형식 틀림", (o) => { o.disposals[0].legalActDate = "2025. 8. 30."; }, "YYYY-MM-DD");
 expectProblem("처분행위 원문 위치 없음", (o) => { o.disposals[0].sources = []; }, "원문 위치가 없음");
+
+console.log("\n■ 용어 풀이는 서버가 원문 기준으로 정리");
+function glossaryOf(mutate: (o: SummaryOutput) => void) {
+  const o = goodOutput();
+  mutate(o);
+  const r = validateSummaryOutput(o, input);
+  return r.ok ? r.summary.glossary : null;
+}
+const reordered = glossaryOf((o) => o.glossary.reverse());
+check("순서가 뒤섞여도 회신에 나온 순서로 정렬", reordered?.map((g) => g.term).join(",") === "수익자,가액배상,가압류", reordered?.map((g) => g.term).join(","));
+const dropped = glossaryOf((o) => o.glossary.push({ term: "제척기간", explanation: "기한이에요.", firstSeen: mail(1) }));
+check("원문에 없는 용어는 뺌", dropped?.length === 3 && !dropped.some((g) => g.term === "제척기간"));
+const relocated = glossaryOf((o) => { o.glossary[0].firstSeen = mail(2); });
+check("처음 나온 위치를 원문에서 다시 찾음", relocated?.[0].firstSeen.page === 1 && relocated?.[0].firstSeen.paragraph === 2);
+const twelve = ["채무자", "수익자", "아파트", "매도", "근저당권", "말소", "가액배상", "청구", "무자력", "채무초과", "보전처분", "가압류"];
+const capped = glossaryOf((o) => { o.glossary = [...twelve].reverse().map((term) => ({ term, explanation: "풀이예요.", firstSeen: pdf(1, 1) })); });
+check("12개 중 앞에서부터 10개만", capped?.length === 10 && capped.map((g) => g.term).join() === twelve.slice(0, 10).join(), capped?.map((g) => g.term).join(","));
 
 console.log("\n■ 유형·사건 표시 처리");
 const other = validateSummaryOutput({ ...goodOutput(), checklist: [] }, { ...input, lawsuitType: "other" });

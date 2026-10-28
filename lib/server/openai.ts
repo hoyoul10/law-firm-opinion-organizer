@@ -26,6 +26,17 @@ export function getModel(): string {
   return process.env.OPENAI_MODEL || DEFAULT_MODEL;
 }
 
+type ReasoningEffort = "low" | "medium" | "high";
+
+/**
+ * AI가 답하기 전에 얼마나 따져 볼지. 샘플 3 시험에서 기본값은 9초지만 처분행위·점검 상태를 자주 틀렸고,
+ * medium은 30초 안팎이지만 정답표와 맞았다. high는 50초 제한을 넘었다. .env의 OPENAI_REASONING_EFFORT로 바꿀 수 있다
+ */
+function getReasoningEffort(): ReasoningEffort {
+  const value = process.env.OPENAI_REASONING_EFFORT;
+  return value === "low" || value === "high" ? value : "medium";
+}
+
 /** AI 호출 실패. code는 화면 안내 문구와 이어진다 (lib/api-errors.ts) */
 export class AiCallError extends Error {
   constructor(public readonly code: Extract<ApiErrorCode, "AI_TIMEOUT" | "AI_FAILED" | "INVALID_AI_OUTPUT">) {
@@ -50,6 +61,7 @@ export async function requestStructured<S extends z.ZodType>(options: {
       instructions: options.instructions,
       input: options.input,
       text: { format: zodTextFormat(options.schema, options.schemaName) },
+      reasoning: { effort: getReasoningEffort() },
       store: false,
     });
     if (response.output_parsed == null) throw new AiCallError("INVALID_AI_OUTPUT");

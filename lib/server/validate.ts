@@ -22,18 +22,14 @@ export type ValidationResult =
   | { ok: false; problems: string[] };
 
 /** 보낸 원문에 실제로 있는 위치 목록. PDF는 "파일|쪽|문단", 그 외는 "파일||문단" */
-function buildLocationIndex(input: ReplyInput) {
+function buildLocationKeys(input: ReplyInput): Set<string> {
   const keys = new Set<string>();
-  const order = new Map<string, number>();
-  input.sources.forEach((source, fileIndex) => {
-    source.segments.forEach((seg, segIndex) => {
-      const key = `${source.fileName}|${source.kind === "pdf" ? seg.page : ""}|${seg.paragraph}`;
-      keys.add(key);
-      // 회신에 나온 순서: 파일 순서 → 그 안의 순서
-      order.set(key, fileIndex * 1_000_000 + segIndex);
-    });
-  });
-  return { keys, order };
+  for (const source of input.sources) {
+    for (const seg of source.segments) {
+      keys.add(`${source.fileName}|${source.kind === "pdf" ? seg.page : ""}|${seg.paragraph}`);
+    }
+  }
+  return keys;
 }
 
 function locationKey(loc: LocationOutput): string {
@@ -54,6 +50,28 @@ function clean(value: string | null): string | null {
   return v ? v : null;
 }
 
+/** 원문에서 글자가 처음 나오는 위치. 없으면 null */
+function findFirst(input: ReplyInput, term: string): { order: number; location: SourceLocation } | null {
+  if (!term) return null;
+  for (const [fileIndex, source] of input.sources.entries()) {
+    for (const [segIndex, seg] of source.segments.entries()) {
+      const at = seg.text.indexOf(term);
+      if (at >= 0) {
+        return {
+          // 파일 순서 → 문단 순서 → 문단 안 글자 위치
+          order: (fileIndex * 100_000 + segIndex) * 100_000 + at,
+          location: {
+            fileName: source.fileName,
+            ...(source.kind === "pdf" && seg.page && { page: seg.page }),
+            paragraph: seg.paragraph,
+          },
+        };
+      }
+    }
+  }
+  return null;
+}
+
 /** 문장 수 (마침표·물음표·느낌표로 끝나는 덩어리) */
 export function countSentences(text: string): number {
   return text
@@ -64,7 +82,7 @@ export function countSentences(text: string): number {
 
 export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput): ValidationResult {
   const problems: string[] = [];
-  const { keys, order } = buildLocationIndex(input);
+  const keys = buildLocationKeys(input);
 
   const checkLocations = (where: string, locs: LocationOutput[]) => {
     for (const loc of locs) {
@@ -140,22 +158,18 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
     });
   }
 
-  // 용어 풀이: 최대 10개, 2문장 이내, 회신에 나온 순서
-  if (output.glossary.length > MAX_GLOSSARY_TERMS) {
-    problems.push(`용어 풀이: ${MAX_GLOSSARY_TERMS}개를 넘음 (${output.glossary.length}개)`);
-  }
-  let lastOrder = -1;
-  const glossary = output.glossary.map((g) => {
-    const where = `용어 "${g.term}"`;
-    if (countSentences(g.explanation) > MAX_GLOSSARY_SENTENCES) problems.push(`${where}: 풀이가 ${MAX_GLOSSARY_SENTENCES}문장을 넘음`);
-    checkLocations(where, [g.firstSeen]);
-    const pos = order.get(locationKey(g.firstSeen));
-    if (pos !== undefined) {
-      if (pos < lastOrder) problems.push(`${where}: 회신에 나온 순서가 아님`);
-      lastOrder = Math.max(lastOrder, pos);
-    }
-    return { term: g.term.trim(), explanation: g.explanation.trim(), firstSeen: toSourceLocation(g.firstSeen) };
-  });
+  // 용어 풀이: 원문에 글자 그대로 나온 용어만, 처음 나온 순서대로, 최대 10개, 2문장 이내.
+  // 순서와 처음 나온 위치는 AI 답을 믿지 않고 서버가 원문에서 직접 찾아 정한다 (PRD: 회신에 나온 순서)
+  const seenTerms = new Set<string>();
+  const glossary = output.glossary
+    .map((g) => ({ ...g, term: g.term.trim(), explanation: g.explanation.trim(), at: findFirst(input, g.term.trim()) }))
+    .filter((g) => g.term && g.at !== null && !seenTerms.has(g.term) && seenTerms.add(g.term))
+    .sort((a, b) => a.at!.order - b.at!.order)
+    .slice(0, MAX_GLOSSARY_TERMS)
+    .map((g) => {
+      if (countSentences(g.explanation) > MAX_GLOSSARY_SENTENCES) problems.push(`용어 "${g.term}": 풀이가 ${MAX_GLOSSARY_SENTENCES}문장을 넘음`);
+      return { term: g.term, explanation: g.explanation, firstSeen: g.at!.location };
+    });
 
   if (problems.length > 0) return { ok: false, problems };
 
