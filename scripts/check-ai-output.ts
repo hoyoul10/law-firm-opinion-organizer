@@ -104,9 +104,9 @@ console.log("\n■ 틀린 답은 막음");
 expectProblem("점검 항목이 9개", (o) => o.checklist.pop(), "정확히 10개");
 expectProblem("점검 번호 순서가 섞임", (o) => o.checklist.reverse(), "정확히 10개");
 expectProblem("'회신에 없음'인데 원문 위치가 있음", (o) => { o.checklist[0].summary = { text: NOT_IN_REPLY, sources: [pdf(1, 1)] }; }, "원문 위치가 있음");
-expectProblem("요약은 있는데 원문 위치가 없음", (o) => { o.firmOpinion.sources = []; }, "원문 위치가 없음");
+expectProblem("요약은 있는데 원문 위치가 없음", (o) => { o.issues[0].detail.sources = []; }, "원문 위치가 없음");
 expectProblem("보낸 원문에 없는 위치", (o) => { o.issues[0].detail.sources = [pdf(5, 9)]; }, "없는 위치만 있음");
-expectProblem("이메일에 쪽 번호를 붙임", (o) => { o.firmOpinion.sources = [{ fileName: "이메일 본문", page: 1, paragraph: 1 }]; }, "없는 위치만 있음");
+expectProblem("이메일에 쪽 번호를 붙임", (o) => { o.issues[0].detail.sources = [{ fileName: "이메일 본문", page: 1, paragraph: 1 }]; }, "없는 위치만 있음");
 expectProblem("상태와 요약이 맞지 않음", (o) => { o.checklist[0].status = "present"; }, "맞지 않음");
 expectProblem("용어 풀이 3문장", (o) => { o.glossary[0].explanation = "첫째예요. 둘째예요. 셋째예요."; }, "2문장");
 expectProblem("법률행위 일자 형식 틀림", (o) => { o.disposals[0].legalActDate = "2025. 8. 30."; }, "YYYY-MM-DD");
@@ -218,6 +218,37 @@ if (good.ok) {
   check("HTML 특수문자 처리", escapeHtml(`<script>alert("x")</script>&`) === "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;&amp;");
   const html = buildDownloadHtml({ createdAt: "2026-10-28", summary, deadlines: null, draft: { ...baseDraft, debtor: "<img src=x onerror=alert(1)>" } });
   check("내려받은 HTML에 스크립트·태그가 실행되지 않음", !/<script|<img/i.test(html) && html.includes("&lt;img"));
+}
+
+console.log("\n■ 사건 표시: 원문에 없는 모양의 이름 처리");
+{
+  const withIdentity = (identity: SummaryOutput["identity"]) => {
+    const o = goodOutput();
+    o.identity = identity;
+    return validateSummaryOutput(o, input);
+  };
+  // 원문(input)에는 "서채무"(1쪽 1문단)와 "남수익"(1쪽 2문단)이 그대로 있다
+  const prefixed = withIdentity({ caseNumber: null, debtorName: "채무자 서채무", beneficiaryNames: ["남수익 씨"], sources: [] });
+  check("'채무자 서채무'·'남수익 씨'는 덧붙인 말을 떼고 원문에서 찾음", prefixed.ok && prefixed.summary.identity.debtorName === "서채무" && prefixed.summary.identity.beneficiaryNames[0] === "남수익", prefixed.ok ? JSON.stringify(prefixed.summary.identity) : prefixed.problems.join(" / "));
+  check("찾은 이름의 원문 위치가 붙음", prefixed.ok && prefixed.summary.identity.sources.length > 0 && !prefixed.summary.identity.needsUserInput);
+  const invented = withIdentity({ caseNumber: "2099-없는-9999", debtorName: "없는사람", beneficiaryNames: ["가짜수익자"], sources: [] });
+  check("원문에 없는 값만 있으면 실패가 아니라 담당자 입력 요청(needsUserInput)", invented.ok && invented.summary.identity.needsUserInput && invented.summary.identity.debtorName === null && invented.summary.identity.beneficiaryNames.length === 0, invented.ok ? "" : invented.problems.join(" / "));
+  const mixed = withIdentity({ caseNumber: "2099-없는-9999", debtorName: "서채무", beneficiaryNames: [], sources: [] });
+  check("일부만 원문에 있으면 있는 것만 남김", mixed.ok && mixed.summary.identity.caseNumber === null && mixed.summary.identity.debtorName === "서채무" && !mixed.summary.identity.needsUserInput);
+}
+
+console.log("\n■ 근거 없는 법무법인 의견");
+{
+  const o = goodOutput();
+  o.firmOpinion = { text: "법무법인은 소 제기를 권고함", sources: [] };
+  const r = validateSummaryOutput(o, input);
+  check("근거를 대지 못한 의견은 실패가 아니라 '회신에 없음'으로 바꿈", r.ok && r.summary.firmOpinion.text === NOT_IN_REPLY && r.summary.firmOpinion.sources.length === 0, r.ok ? "" : r.problems.join(" / "));
+  const o2 = goodOutput();
+  o2.firmOpinion = { text: "법무법인은 소 제기를 권고함", sources: [{ fileName: "없는파일.pdf", page: 1, paragraph: 1 }] };
+  const r2 = validateSummaryOutput(o2, input);
+  check("없는 위치만 댄 의견도 '회신에 없음'으로 바꿈", r2.ok && r2.summary.firmOpinion.text === NOT_IN_REPLY);
+  const r3 = validateSummaryOutput(goodOutput(), input);
+  check("근거가 있는 의견은 그대로", r3.ok && r3.summary.firmOpinion.text !== NOT_IN_REPLY);
 }
 
 console.log("\n■ 요청 모양 검사");

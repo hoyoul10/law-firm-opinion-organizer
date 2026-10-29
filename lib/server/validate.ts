@@ -119,23 +119,40 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
   };
 
   // 사건 표시: 원문 위치는 AI 답 대신 서버가 원문에서 이름·번호를 직접 찾아 붙인다
-  const caseNumber = clean(output.identity.caseNumber);
-  const debtorName = clean(output.identity.debtorName);
-  const beneficiaryNames = output.identity.beneficiaryNames.map((n) => n.trim()).filter(Boolean);
-  const hasIdentity = Boolean(caseNumber || debtorName || beneficiaryNames.length);
+  // 원문에 글자 그대로 있는 값만 쓴다. "채무자 가명인", "가명인 씨"처럼 AI가 말을 덧붙였으면 덧붙인 말을 떼고 찾고,
+  // 끝내 못 찾으면 추측하지 않고 비운다 → 셋 다 비면 담당자에게 사건 표시를 입력해 달라고 요청한다 (PRD)
   const identitySources: SourceLocation[] = [];
-  for (const value of [caseNumber, debtorName, ...beneficiaryNames]) {
-    const at = value ? findFirst(input, value) : null;
-    if (at && !identitySources.some((s) => formatKey(s) === formatKey(at.location))) identitySources.push(at.location);
-  }
-  if (hasIdentity && identitySources.length === 0) problems.push("사건 표시: 사건번호·이름이 원문에 그대로 없음");
+  const locateInSource = (raw: string | null): string | null => {
+    const value = clean(raw);
+    if (!value) return null;
+    const stripped = value.replace(/^(채무자|수익자|전득자|피고|원고|사건번호)\s*[:：]?\s*/, "").replace(/\s*(씨|님)$/, "").trim();
+    // 덧붙인 말을 뗀 이름을 먼저 쓴다 ("채무자 서채무"가 원문에 문장으로 있어도 이름은 "서채무")
+    for (const candidate of [stripped, value]) {
+      const at = candidate ? findFirst(input, candidate) : null;
+      if (at) {
+        if (!identitySources.some((s) => formatKey(s) === formatKey(at.location))) identitySources.push(at.location);
+        return candidate;
+      }
+    }
+    return null;
+  };
+  const caseNumber = locateInSource(output.identity.caseNumber);
+  const debtorName = locateInSource(output.identity.debtorName);
+  const beneficiaryNames = output.identity.beneficiaryNames.map(locateInSource).filter((n): n is string => n !== null);
+  const hasIdentity = Boolean(caseNumber || debtorName || beneficiaryNames.length);
 
   // 쟁점·법무법인 의견
   const issues = output.issues.map((issue, i) => ({
     title: issue.title.trim(),
     detail: checkCited(`쟁점 ${i + 1}`, issue.detail),
   }));
-  const firmOpinion = checkCited("법무법인 의견", output.firmOpinion);
+  // 근거 문단을 하나도 대지 못한 의견은 AI가 지어낸 것이므로 버리고 "회신에 없음"으로 둔다 (회신에 의견이 아예 없는 경우)
+  const opinionHasEvidence = validLocations(output.firmOpinion.sources).length > 0;
+  const opinionSaysMissing = /^회신에 없음[.。]?$/.test(output.firmOpinion.text.trim());
+  const firmOpinion =
+    opinionHasEvidence || opinionSaysMissing
+      ? checkCited("법무법인 의견", output.firmOpinion)
+      : { text: NOT_IN_REPLY, sources: [] as SourceLocation[] };
 
   // 처분행위
   const seenIds = new Set<string>();
