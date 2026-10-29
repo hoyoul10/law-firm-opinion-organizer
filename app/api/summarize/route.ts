@@ -2,7 +2,7 @@
 // Design Ref: §5 — ReplyInput을 받아 AI에게 정리를 맡기고, 검사를 통과한 ReplySummary만 돌려준다
 
 import { AiCallError, requestStructured } from "@/lib/server/openai";
-import { summarizeInstructions, tagSources } from "@/lib/server/prompts";
+import { summarizeInstructions, tagSources, wrapReply } from "@/lib/server/prompts";
 import { errorFromParse, errorResponse, logFailure, rejectForeignRequest } from "@/lib/server/respond";
 import { ReplyInputSchema, SummaryOutputSchema } from "@/lib/server/schemas";
 import { validateSummaryOutput } from "@/lib/server/validate";
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       schema: SummaryOutputSchema,
       schemaName: "reply_summary",
       instructions: summarizeInstructions(input.lawsuitType),
-      input: tagged,
+      input: wrapReply(tagged),
     });
 
     const result = validateSummaryOutput(output, input);

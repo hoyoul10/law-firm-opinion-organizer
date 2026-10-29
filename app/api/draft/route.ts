@@ -7,7 +7,7 @@ import { AiCallError, requestStructured } from "@/lib/server/openai";
 import { draftInput, draftInstructions } from "@/lib/server/prompts";
 import { errorFromParse, errorResponse, logFailure, rejectForeignRequest } from "@/lib/server/respond";
 import { DraftOutputSchema, DraftRequestSchema } from "@/lib/server/schemas";
-import { validateDraftOutput } from "@/lib/server/validate";
+import { recheckLegalActDates, validateDraftOutput } from "@/lib/server/validate";
 import type { DraftRequest } from "@/lib/reply-types";
 
 export const maxDuration = 120;
@@ -22,7 +22,9 @@ export async function POST(request: Request) {
   const parsed = DraftRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return errorFromParse(parsed.error);
 
-  const { summary, cancellationKnownDate, sources } = parsed.data as DraftRequest;
+  const { summary: sentSummary, cancellationKnownDate, sources } = parsed.data as DraftRequest;
+  // 화면이 보낸 정리 결과의 법률행위일도 원문 근거 문단과 다시 대조한다 (없으면 비워 [확인 필요])
+  const summary = recheckLegalActDates(sentSummary, sources);
   // 화면이 보낸 제척기간을 믿지 않고, 서버가 처분행위와 '안 날'로 다시 계산한다 (CLAUDE.md 6장)
   const deadlines = computeDeadlines(summary.disposals, cancellationKnownDate, todayInSeoul());
   const input = draftInput(summary, deadlines, sources);

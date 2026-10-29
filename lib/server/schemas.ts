@@ -20,7 +20,8 @@ const TextSegmentSchema = z.object({
 });
 
 export const ExtractedSourceSchema = z.object({
-  fileName: z.string().trim().min(1).max(200),
+  // 꼬리표를 어지럽히는 글자(줄바꿈·탭·|·[·])는 브라우저가 바꿔 보내지만, 직접 호출에도 대비해 서버도 막는다
+  fileName: z.string().trim().min(1).max(200).regex(/^[^\r\n\t|[\]]+$/, "파일 이름에 쓸 수 없는 글자가 있어요"),
   kind: z.enum(["pdf", "hwpx", "email"]),
   round: z.union([z.literal(1), z.literal(2)]),
   /** OCR로 읽은 파일 표시. 칸을 비워 두면 zod가 지워 버려 AI가 "OCR" 꼬리표를 받지 못한다 */
@@ -97,44 +98,51 @@ export type CitedTextOutput = z.infer<typeof CitedTextSchema>;
 
 /* ───────── 초안 ───────── */
 
+/** 화면이 돌려보내는 정리 결과의 글·목록 크기 상한 (비정상적으로 큰 요청을 일찍 거절) */
+const Text = z.string().max(20_000);
+const MAX_ITEMS = 300;
+
 const SourceLocationSchema = z.object({
-  fileName: z.string(),
+  fileName: z.string().max(200),
   page: z.number().int().optional(),
   paragraph: z.number().int().optional(),
 });
 
-const CitedSchema = z.object({ text: z.string(), sources: z.array(SourceLocationSchema) });
+const CitedSchema = z.object({ text: Text, sources: z.array(SourceLocationSchema).max(MAX_ITEMS) });
 
 /** 화면이 돌려보내는 정리 결과 (검사를 통과했던 ReplySummary) */
 const ReplySummarySchema = z.object({
   lawsuitType: z.enum(["fraudulent-transfer", "other"]),
   identity: z.object({
-    caseNumber: z.string().nullable(),
-    debtorName: z.string().nullable(),
-    beneficiaryNames: z.array(z.string()),
+    caseNumber: Text.nullable(),
+    debtorName: Text.nullable(),
+    beneficiaryNames: z.array(Text).max(MAX_ITEMS),
     needsUserInput: z.boolean(),
-    manualLabel: z.string().nullable(),
-    sources: z.array(SourceLocationSchema),
+    manualLabel: Text.nullable(),
+    sources: z.array(SourceLocationSchema).max(MAX_ITEMS),
   }),
-  firmName: z.string().nullable(),
-  issues: z.array(z.object({ title: z.string(), detail: CitedSchema })),
+  firmName: Text.nullable(),
+  issues: z.array(z.object({ title: Text, detail: CitedSchema })).max(MAX_ITEMS),
   firmOpinion: CitedSchema,
-  disposals: z.array(
-    z.object({
-      id: z.string(),
-      kind: z.string(),
-      beneficiary: z.string(),
-      subsequentAcquirer: z.string().nullable(),
-      property: z.string(),
-      legalActDate: IsoDateSchema.nullable(),
-      sources: z.array(SourceLocationSchema),
-    }),
-  ),
+  disposals: z
+    .array(
+      z.object({
+        id: Text,
+        kind: Text,
+        beneficiary: Text,
+        subsequentAcquirer: Text.nullable(),
+        property: Text,
+        legalActDate: IsoDateSchema.nullable(),
+        sources: z.array(SourceLocationSchema).max(MAX_ITEMS),
+      }),
+    )
+    .max(MAX_ITEMS),
   checklist: z
     .array(z.object({ id: z.number().int(), status: z.enum(["present", "not-in-reply", "unclear"]), summary: CitedSchema }))
+    .max(MAX_ITEMS)
     .nullable(),
-  glossary: z.array(z.object({ term: z.string(), explanation: z.string(), firstSeen: SourceLocationSchema })),
-  typeMismatchWarning: z.string().nullable(),
+  glossary: z.array(z.object({ term: Text, explanation: Text, firstSeen: SourceLocationSchema })).max(MAX_ITEMS),
+  typeMismatchWarning: Text.nullable(),
 });
 
 /**

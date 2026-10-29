@@ -15,6 +15,9 @@ const STATUS: Record<ApiErrorCode, number> = {
   NETWORK: 503,
 };
 
+/** 요청 본문 상한 (4MB). 쪽 그림 6장(각 약 750KB)과 글 50장 분량이 모두 이 안에 들어간다 */
+const MAX_BODY_BYTES = 4 * 1024 * 1024;
+
 export function errorResponse(code: ApiErrorCode): Response {
   const body: ApiErrorBody = { error: { code, message: API_ERROR_MESSAGES[code] } };
   return Response.json(body, { status: STATUS[code] });
@@ -38,11 +41,22 @@ export function logFailure(
  * curl 같은 직접 호출은 이것만으로 막을 수 없어 Vercel 접근 보호·요청 횟수 제한이 따로 필요하다.
  */
 export function rejectForeignRequest(request: Request): Response | null {
-  if (!request.headers.get("content-type")?.includes("application/json")) return errorResponse("INVALID_INPUT");
+  // 종류를 정확히 비교한다 ("text/plain; x=application/json" 같은 값은 사전 확인 없이 다른 사이트에서 보낼 수 있다)
+  const contentType = request.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
+  if (contentType !== "application/json") return errorResponse("INVALID_INPUT");
+  // 본문을 다 읽어 검사하기 전에 아주 큰 요청부터 거절한다 (Vercel은 4.5MB에서 따로 막는다)
+  const length = Number(request.headers.get("content-length"));
+  if (Number.isFinite(length) && length > MAX_BODY_BYTES) return errorResponse("PAYLOAD_TOO_LARGE");
   const origin = request.headers.get("origin");
   if (origin) {
     const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-    if (!host || new URL(origin).host !== host) return errorResponse("INVALID_INPUT");
+    let originHost: string | null = null;
+    try {
+      originHost = new URL(origin).host;
+    } catch {
+      // Origin이 "null"이거나 깨진 값이면 주소로 읽을 수 없다 → 거절 (예외로 500이 나지 않게)
+    }
+    if (!host || originHost !== host) return errorResponse("INVALID_INPUT");
   }
   return null;
 }

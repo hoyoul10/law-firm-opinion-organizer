@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { extractFile } from "@/lib/extract";
 import { ocrPdf } from "@/lib/extract/ocr";
+import { safeFileName } from "@/lib/extract/shared";
 import type { ExtractResult } from "@/lib/extract/types";
 import { LAWSUIT_TYPE_LABELS, type LawsuitType, type ReplyRound } from "@/lib/reply-types";
 import FileList, { type UploadedFile } from "./FileList";
@@ -129,7 +130,8 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
       }
       // 이름만 같고 내용이 다른 파일(예: 1차·2차 회신)은 "이름 (2)"처럼 구분해서 둘 다 올린다
       const used = new Set(all.map((f) => f.displayName));
-      const displayName = used.has(file.name) ? uniqueName(file.name, used) : file.name;
+      const safeName = safeFileName(file.name);
+      const displayName = used.has(safeName) ? uniqueName(safeName, used) : safeName;
       if (displayName !== file.name) renamed.push(`${file.name} → ${displayName}`);
       added.push({ id: `f${nextId++}`, file, displayName, round: 1, result: null });
     }

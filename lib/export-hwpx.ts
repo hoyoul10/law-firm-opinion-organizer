@@ -28,7 +28,9 @@ const LANGS = ["HANGUL", "LATIN", "HANJA", "JAPANESE", "OTHER", "SYMBOL", "USER"
 /** XML에 못 쓰는 제어 문자를 지우고 특수문자를 바꾼다 */
 export function escapeXml(text: string): string {
   return text
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, "")
+    // 짝이 없는 서로게이트 글자도 XML에 쓸 수 없어 지운다 (짝이 맞는 이모지 등은 그대로)
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");

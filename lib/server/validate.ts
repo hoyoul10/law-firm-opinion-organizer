@@ -87,6 +87,35 @@ function findFirst(input: ReplyInput, term: string): { order: number; location: 
   return null;
 }
 
+/**
+ * 법률행위 일자(YYYY-MM-DD)가 근거 문단(또는 같은 파일·쪽의 바로 앞뒤 문단)에 적혀 있는지.
+ * 날짜는 여러 표기("2025. 8. 30.", "2025년 8월 30일")를 같은 날짜로 본다.
+ */
+export function dateInCitedParagraphs(isoDate: string, sources: ExtractedSource[], cited: SourceLocation[]): boolean {
+  const [y, mo, da] = isoDate.split("-");
+  const want = normalizeDate(y, mo, da);
+  for (const source of sources) {
+    for (const loc of cited) {
+      if (loc.fileName !== source.fileName || loc.paragraph === undefined) continue;
+      for (const seg of source.segments) {
+        const samePage = source.kind !== "pdf" || seg.page === loc.page;
+        if (samePage && Math.abs(seg.paragraph - loc.paragraph) <= 1 && datesIn(seg.text).has(want)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** 초안 요청의 정리 결과도 화면이 보낸 것이라, 법률행위 일자를 같은 기준으로 다시 대조해 근거 없는 날짜는 비운다 */
+export function recheckLegalActDates(summary: ReplySummary, sources: ExtractedSource[]): ReplySummary {
+  return {
+    ...summary,
+    disposals: summary.disposals.map((d) =>
+      d.legalActDate && !dateInCitedParagraphs(d.legalActDate, sources, d.sources) ? { ...d, legalActDate: null } : d,
+    ),
+  };
+}
+
 /** 문장 수 (마침표·물음표·느낌표로 끝나는 덩어리) */
 export function countSentences(text: string): number {
   return text
@@ -155,7 +184,6 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
       : { text: NOT_IN_REPLY, sources: [] as SourceLocation[] };
 
   // 처분행위
-  const sourceDates = datesIn(input.sources.flatMap((s) => s.segments.map((seg) => seg.text)).join("\n"));
   const seenIds = new Set<string>();
   const disposals = output.disposals.map((d, i) => {
     const where = `처분행위 ${i + 1}`;
@@ -163,12 +191,12 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
     seenIds.add(d.id);
     let legalActDate = clean(d.legalActDate);
     if (legalActDate && !isIsoDate(legalActDate)) problems.push(`${where}: 법률행위 일자가 YYYY-MM-DD 형식이 아님 (${legalActDate})`);
-    // 제척기간은 이 날짜로 계산하므로 원문에 그 날짜가 실제로 있어야 한다. 없으면 AI가 잘못 바꾼 것일 수 있어 비우고 [확인 필요]로 둔다
-    if (legalActDate && isIsoDate(legalActDate)) {
-      const [y, mo, da] = legalActDate.split("-");
-      if (!sourceDates.has(normalizeDate(y, mo, da))) legalActDate = null;
-    }
     const valid = validLocations(d.sources);
+    // 제척기간은 이 날짜로 계산하므로, 이 처분행위가 근거로 든 문단(과 바로 앞뒤 문단)에 그 날짜가 실제로 있어야 한다.
+    // 원문 다른 곳의 날짜를 고르거나 AI가 잘못 바꾼 날짜는 비우고 [확인 필요]로 둔다 (원문 속 지시 문구로 경고를 지우는 것도 막는다)
+    if (legalActDate && isIsoDate(legalActDate) && !dateInCitedParagraphs(legalActDate, input.sources, valid.map(toSourceLocation))) {
+      legalActDate = null;
+    }
     if (valid.length === 0) problems.push(`${where}: 원문 위치가 없음`);
     // 수익자 이름도 원문에 글자 그대로 있어야 한다. 덧붙인 말은 떼고, 그래도 없으면 [확인 필요]를 붙인다
     const rawBeneficiary = d.beneficiary.trim();
