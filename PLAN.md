@@ -86,6 +86,10 @@ PRD의 **must 2개**(회신 정리·누락 점검, 소송 의뢰 초안 생성·
 
 33. 스캔 PDF를 OCR(AI 글자 인식)로 읽기 — **담당자 요청 2026-10-29** (PRD 비범위 8번을 범위로 변경). [OCR로 읽기] 버튼을 누를 때만 쪽 그림을 서버로 보내 읽고, 인식 오류 가능을 알림 → `lib/extract/ocr.ts`, `app/api/ocr/route.ts`, `components/FileList.tsx`, 샘플 `samples/edge-cases/edge-4_*` (완료, DESIGN 13.3)
 
+34. 설계-코드 차이 분석에서 나온 높음 2개·중간 10개 수정 (같은 이름 파일, 초안 덮어쓰기 확인, 차수 어긋남, 파일 읽기 실패, 큰 입력·미래 날짜 안내, 낡은 결과 표시, 대조 경쟁, 초안 이름·대조 사건번호 확인) → DESIGN 3.2 (완료). 낮음 9개는 요청이 없어 보류
+
+**배포 상태 (2026-10-29):** `https://law-firm-opinion-organizer.vercel.app`에 배포돼 있고 Vercel 로그인 보호가 켜져 있다 (인증 없이는 401). 마지막 배포는 OCR·수정 반영본. **이후 배포·재배포는 담당자가 "배포해"라고 할 때만 한다.**
+
 ### nice (must 완료 후에만 — 담당자가 먼저 요청해 구현 대기, 설계는 DESIGN 13장)
 
 29. 법원 '나의 사건검색' PDF를 올려 회신의 주요 날짜·진행상황과 대조하고, 다른 항목 표시하기 — **담당자 결정:** 평소에는 올리지 않고, 필요할 때만 사건정보 PDF를 올려 "대조 요청" 버튼을 눌렀을 때만 비교한다 (정리하기와 별도 동작). 가명 샘플 PDF 필요 → `app/api/compare/route.ts`, `components/CaseInfoCompare.tsx`, `lib/server/validate.ts`, 샘플 `samples/court/` (완료)
