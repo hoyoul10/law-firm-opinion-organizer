@@ -158,6 +158,25 @@ export function draftInput(
           })
           .join("\n")
       : `- 처분행위가 없어 계산하지 못함 ${NEEDS_CHECK}`;
+  // 초안 AI에게는 정리 결과가 근거로 든 문단만 보낸다 (비용 절감: 50장 기준 입력 9만 → 수천 토큰).
+  // 날짜·금액·이름이 원문과 같은지는 서버가 전체 원문으로 따로 대조한다 (validateDraftOutput)
+  const citedKeys = new Set<string>();
+  const cite = (locs: { fileName: string; page?: number; paragraph?: number }[]) =>
+    locs.forEach((l) => citedKeys.add(`${l.fileName}|${l.page ?? ""}|${l.paragraph ?? ""}`));
+  cite(summary.identity.sources);
+  cite(summary.firmOpinion.sources);
+  summary.issues.forEach((i) => cite(i.detail.sources));
+  summary.disposals.forEach((d) => cite(d.sources));
+  summary.checklist?.forEach((c) => cite(c.summary.sources));
+  const citedSources = sources
+    .map((s) => ({
+      ...s,
+      segments: s.segments.filter((seg) => citedKeys.has(`${s.fileName}|${s.kind === "pdf" ? (seg.page ?? "") : ""}|${seg.paragraph}`)),
+    }))
+    .filter((s) => s.segments.length > 0);
+  // 근거 문단이 하나도 없으면(드문 경우) 전체 원문을 보낸다
+  const sourcesForAi = citedSources.length > 0 ? citedSources : sources;
+
   const { lawsuitType: _type, glossary: _glossary, ...rest } = summary;
   void _type;
   void _glossary;
@@ -169,6 +188,6 @@ ${JSON.stringify(rest)}
 deadlineReview에는 처분행위 id(d1 등) 대신 처분행위 종류와 수익자 이름으로 적는다.
 ${deadlineLines}
 
-## 회신 원문
-${tagSources(sources)}`;
+## 회신 원문 (정리 결과가 근거로 든 문단만)
+${tagSources(sourcesForAi)}`;
 }

@@ -10,8 +10,8 @@ import type { DraftRequest } from "@/lib/reply-types";
 
 export const maxDuration = 120;
 
-/** 비용 방지용 글자 수 상한 (Design Ref: §7) */
-const MAX_CHARS = 80_000;
+/** 비용 방지용 글자 수 상한 (Design Ref: §7). 정리 결과와 원문을 함께 받으므로 정리보다 크게 잡았다 */
+const MAX_CHARS = 250_000;
 
 export async function POST(request: Request) {
   const rejected = rejectForeignRequest(request);

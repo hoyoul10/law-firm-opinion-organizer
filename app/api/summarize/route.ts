@@ -10,8 +10,8 @@ import type { ReplyInput } from "@/lib/reply-types";
 
 export const maxDuration = 120;
 
-/** 비용 방지용 글자 수 상한 (Design Ref: §7). 실제 길이를 재 본 뒤 조정한다 */
-const MAX_CHARS = 50_000;
+/** 비용 방지용 글자 수 상한 (Design Ref: §7). 의견서는 길어도 PDF 50장 이하(약 75,000~125,000자)라는 담당자 결정(2026-10-29)에 맞춰 넉넉히 잡았다 */
+const MAX_CHARS = 200_000;
 
 export async function POST(request: Request) {
   const rejected = rejectForeignRequest(request);

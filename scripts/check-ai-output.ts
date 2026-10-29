@@ -6,6 +6,7 @@ import { NOT_IN_REPLY, type ReplyInput } from "../lib/reply-types";
 import { ReplyInputSchema, SummaryOutputSchema, type SummaryOutput } from "../lib/server/schemas";
 import { validateDraftOutput, validateSummaryOutput } from "../lib/server/validate";
 import { countNeedsCheck } from "../lib/draft";
+import { draftInput } from "../lib/server/prompts";
 import { computeDeadline, computeDeadlines } from "../lib/deadline";
 import { buildDownloadHtml, escapeHtml } from "../lib/export-html";
 
@@ -166,6 +167,9 @@ if (good.ok) {
     firmOpinionSummary: "법무법인은 소 제기를 검토할 만하다고 봄",
     attachmentsAndChecks: "등기부",
   };
+  const withExtra = [{ ...input.sources[0], segments: [...input.sources[0].segments, { page: 2, paragraph: 9, text: "인용되지 않은 문단입니다" }] }, input.sources[1]];
+  const draftText = draftInput(summary, null, withExtra);
+  check("초안 AI에는 근거로 든 문단만 보냄 (비용 절감)", draftText.includes("근저당권이 말소") && !draftText.includes("인용되지 않은 문단"));
   const okDraft = validateDraftOutput(baseDraft, summary, null, input.sources);
   check("맞는 초안 통과", okDraft.ok, okDraft.ok ? "" : okDraft.problems.join(" / "));
   const wrongDate = validateDraftOutput({ ...baseDraft, securedClaim: "2023. 4. 19. 발생" }, summary, null, input.sources);

@@ -70,6 +70,13 @@ export async function requestStructured<S extends z.ZodType>(options: {
       max_output_tokens: MAX_OUTPUT_TOKENS,
       store: false,
     });
+    // 비용 확인용: 토큰 수만 남긴다 (회신 내용은 남기지 않음)
+    const usage = response.usage;
+    if (usage) {
+      console.info(
+        `[openai] ${options.schemaName} tokens in=${usage.input_tokens} out=${usage.output_tokens} reasoning=${usage.output_tokens_details?.reasoning_tokens ?? 0}`,
+      );
+    }
     if (response.output_parsed == null) throw new AiCallError("INVALID_AI_OUTPUT");
     return response.output_parsed as z.infer<S>;
   } catch (err) {
