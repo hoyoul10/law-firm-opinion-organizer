@@ -6,6 +6,7 @@ import { caseLabel, deadlineMessage, formatLocation } from "./labels";
 import {
   CHECKLIST_ITEMS,
   CHECKLIST_STATUS_LABELS,
+  COMPARE_RESULT_LABELS,
   LAWSUIT_TYPE_LABELS,
   NOT_IN_REPLY,
   type DownloadBundle,
@@ -82,6 +83,17 @@ export function buildDownloadHtml(bundle: DownloadBundle): string {
       }
       parts.push(`</table>`);
     }
+  }
+
+  // 5-2. 사건정보 대조 (담당자가 요청했을 때만)
+  if (bundle.compare) {
+    const diff = bundle.compare.items.filter((i) => i.result === "different").length;
+    parts.push(`<h2>사건정보 대조</h2><p class="notice${diff > 0 ? " danger" : ""}">${diff > 0 ? `⚠ 회신과 사건정보가 다른 항목이 ${diff}개 있습니다.` : "회신과 사건정보가 다른 항목은 없습니다."} (${e(bundle.compare.caseInfoFileName)})</p>`);
+    parts.push(`<table><tr><th>주제</th><th>결과</th><th>회신</th><th>사건정보</th></tr>`);
+    for (const i of bundle.compare.items) {
+      parts.push(`<tr><td>${e(i.topic)}</td><td>${e(COMPARE_RESULT_LABELS[i.result])}</td><td>${e(i.replySays.text)}${where(i.replySays.sources)}</td><td>${e(i.courtSays.text)}${where(i.courtSays.sources)}</td></tr>`);
+    }
+    parts.push(`</table>`);
   }
 
   // 6. 점검 10항목

@@ -174,3 +174,28 @@ export const DraftOutputSchema = z.object({
 });
 
 export type DraftOutput = z.infer<typeof DraftOutputSchema>;
+
+/* ───────── 사건정보 대조 ───────── */
+
+/** POST /api/compare 요청 */
+export const CompareRequestSchema = z.object({
+  summary: ReplySummarySchema,
+  sources: z.array(ExtractedSourceSchema).min(1).max(30),
+  caseInfo: ExtractedSourceSchema,
+});
+
+const CompareSideSchema = z.object({ text: z.string(), sources: z.array(LocationSchema) });
+
+/** AI가 돌려주는 대조 결과 (주제 6개) */
+export const CompareOutputSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.number().int(),
+      result: z.enum(["same", "different", "not-comparable"]),
+      replySays: CompareSideSchema,
+      courtSays: CompareSideSchema,
+    }),
+  ),
+});
+
+export type CompareOutput = z.infer<typeof CompareOutputSchema>;

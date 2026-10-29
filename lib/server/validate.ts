@@ -8,10 +8,14 @@ import {
   CHECKLIST_ITEMS,
   MAX_GLOSSARY_SENTENCES,
   MAX_GLOSSARY_TERMS,
+  COMPARE_TOPICS,
   NEEDS_CHECK,
+  NOT_IN_COURT,
   NOT_IN_REPLY,
   type ChecklistItemId,
+  type CaseCompare,
   type CitedText,
+  type CompareItem,
   type DeadlineSummary,
   type ExtractedSource,
   type LawsuitDraft,
@@ -20,14 +24,14 @@ import {
   type SourceLocation,
 } from "../reply-types";
 import { NO_DISPOSAL_ID } from "./prompts";
-import type { CitedTextOutput, DraftOutput, LocationOutput, SummaryOutput } from "./schemas";
+import type { CitedTextOutput, CompareOutput, DraftOutput, LocationOutput, SummaryOutput } from "./schemas";
 
 export type ValidationResult =
   | { ok: true; summary: ReplySummary }
   | { ok: false; problems: string[] };
 
 /** 보낸 원문에 실제로 있는 위치 목록. PDF는 "파일|쪽|문단", 그 외는 "파일||문단" */
-function buildLocationKeys(input: ReplyInput): Set<string> {
+function buildLocationKeys(input: { sources: ExtractedSource[] }): Set<string> {
   const keys = new Set<string>();
   for (const source of input.sources) {
     for (const seg of source.segments) {
@@ -295,4 +299,84 @@ export function validateDraftOutput(
   };
 
   return problems.length > 0 ? { ok: false, problems } : { ok: true, draft };
+}
+
+/* ───────── 사건정보 대조 검사 ───────── */
+
+export type CompareValidationResult = { ok: true; compare: CaseCompare } | { ok: false; problems: string[] };
+
+function datesIn(text: string): Set<string> {
+  const found = new Set<string>();
+  for (const m of text.matchAll(DATE_PATTERN)) found.add(normalizeDate(m[1], m[2], m[3]));
+  return found;
+}
+
+/**
+ * 대조 결과 검사. 주제 6개가 순서대로 있는지, 양쪽 근거 위치가 실제 원문에 있는지,
+ * 한쪽에 내용이 없으면 "비교 불가"인지, 날짜가 서로 다르면 "일치"로 두지 않는지 본다.
+ * 사건정보와 회신이 다른 항목을 놓치지 않는 쪽(다름으로 표시)으로 기운다. Plan SC: 29
+ */
+export function validateCompareOutput(
+  output: CompareOutput,
+  replySources: ExtractedSource[],
+  caseInfo: ExtractedSource,
+): CompareValidationResult {
+  const problems: string[] = [];
+  const replyKeys = buildLocationKeys({ sources: replySources });
+  const courtKeys = buildLocationKeys({ sources: [caseInfo] });
+  const replyCorpus = replySources.flatMap((s) => s.segments.map((seg) => seg.text)).join("\n");
+  const courtCorpus = caseInfo.segments.map((seg) => seg.text).join("\n");
+
+  if (output.items.length !== COMPARE_TOPICS.length || COMPARE_TOPICS.some((t, i) => output.items[i]?.id !== t.id)) {
+    problems.push(`대조 주제: 1~6번이 순서대로 정확히 6개여야 함 (받은 번호: ${output.items.map((i) => i.id).join(",") || "없음"})`);
+  }
+
+  const side = (where: string, raw: { text: string; sources: LocationOutput[] }, missingText: string, keys: Set<string>, corpus: string) => {
+    let text = raw.text.trim();
+    if (raw.sources.length === 0 && new RegExp(`^${missingText}[.。]?$`).test(text)) text = missingText;
+    const missing = text === missingText;
+    const valid = raw.sources.filter((l) => l.paragraph !== null && keys.has(locationKey(l)));
+    if (!text) problems.push(`${where}: 내용이 비어 있음`);
+    if (missing && raw.sources.length > 0) problems.push(`${where}: "${missingText}"인데 원문 위치가 있음`);
+    if (!missing && text && valid.length === 0) problems.push(`${where}: 원문 위치가 없음`);
+    // 원문에 없는 날짜는 [확인 필요]를 붙인다
+    const known = datesIn(corpus);
+    const marked = missing
+      ? text
+      : text.replace(DATE_PATTERN, (match, y, m, d) =>
+          known.has(normalizeDate(y, m, d)) ? match : `${match} ${NEEDS_CHECK}(원문에 없는 날짜)`,
+        );
+    return { text: marked, sources: valid.map(toSourceLocation), missing };
+  };
+
+  const items: CompareItem[] = COMPARE_TOPICS.map((topic, i) => {
+    const raw = output.items[i];
+    const where = `대조 ${topic.id}번`;
+    const reply = side(`${where} 회신`, raw?.replySays ?? { text: "", sources: [] }, NOT_IN_REPLY, replyKeys, replyCorpus);
+    const court = side(`${where} 사건정보`, raw?.courtSays ?? { text: "", sources: [] }, NOT_IN_COURT, courtKeys, courtCorpus);
+
+    let result = raw?.result ?? "not-comparable";
+    if (reply.missing || court.missing) {
+      result = "not-comparable";
+    } else {
+      if (result === "not-comparable") problems.push(`${where}: 양쪽에 내용이 있는데 비교 불가로 표시됨`);
+      // 날짜가 서로 다르면 일치로 두지 않는다 (놓치는 것보다 한 번 더 보는 쪽이 안전)
+      const a = datesIn(reply.text);
+      const b = datesIn(court.text);
+      const differs = [...a].some((d) => !b.has(d)) || [...b].some((d) => !a.has(d));
+      if (result === "same" && a.size > 0 && b.size > 0 && differs) {
+        result = "different";
+        court.text += " (날짜가 서로 달라 다름으로 표시)";
+      }
+    }
+    return {
+      id: topic.id,
+      topic: topic.title,
+      result,
+      replySays: { text: reply.text, sources: reply.sources },
+      courtSays: { text: court.text, sources: court.sources },
+    };
+  });
+
+  return problems.length > 0 ? { ok: false, problems } : { ok: true, compare: { caseInfoFileName: caseInfo.fileName, items } };
 }

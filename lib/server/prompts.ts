@@ -4,8 +4,10 @@
 import "server-only";
 import {
   CHECKLIST_ITEMS,
+  COMPARE_TOPICS,
   MAX_GLOSSARY_TERMS,
   NEEDS_CHECK,
+  NOT_IN_COURT,
   NOT_IN_REPLY,
   type ExtractedSource,
   type DeadlineSummary,
@@ -142,6 +144,25 @@ export function draftInstructions(): string {
 - 공문서처럼 간결한 한국어로 쓴다. 각 칸은 1~4문장.`;
 }
 
+/** 정리 결과가 근거로 든 문단만 골라낸다. 하나도 없으면(드문 경우) 전체 원문을 그대로 쓴다 */
+export function pickCitedSources(summary: ReplySummary, sources: ExtractedSource[]): ExtractedSource[] {
+  const citedKeys = new Set<string>();
+  const cite = (locs: { fileName: string; page?: number; paragraph?: number }[]) =>
+    locs.forEach((l) => citedKeys.add(`${l.fileName}|${l.page ?? ""}|${l.paragraph ?? ""}`));
+  cite(summary.identity.sources);
+  cite(summary.firmOpinion.sources);
+  summary.issues.forEach((i) => cite(i.detail.sources));
+  summary.disposals.forEach((d) => cite(d.sources));
+  summary.checklist?.forEach((c) => cite(c.summary.sources));
+  const cited = sources
+    .map((s) => ({
+      ...s,
+      segments: s.segments.filter((seg) => citedKeys.has(`${s.fileName}|${s.kind === "pdf" ? (seg.page ?? "") : ""}|${seg.paragraph}`)),
+    }))
+    .filter((s) => s.segments.length > 0);
+  return cited.length > 0 ? cited : sources;
+}
+
 export function draftInput(
   summary: ReplySummary,
   deadlines: DeadlineSummary | null,
@@ -160,22 +181,7 @@ export function draftInput(
       : `- 처분행위가 없어 계산하지 못함 ${NEEDS_CHECK}`;
   // 초안 AI에게는 정리 결과가 근거로 든 문단만 보낸다 (비용 절감: 50장 기준 입력 9만 → 수천 토큰).
   // 날짜·금액·이름이 원문과 같은지는 서버가 전체 원문으로 따로 대조한다 (validateDraftOutput)
-  const citedKeys = new Set<string>();
-  const cite = (locs: { fileName: string; page?: number; paragraph?: number }[]) =>
-    locs.forEach((l) => citedKeys.add(`${l.fileName}|${l.page ?? ""}|${l.paragraph ?? ""}`));
-  cite(summary.identity.sources);
-  cite(summary.firmOpinion.sources);
-  summary.issues.forEach((i) => cite(i.detail.sources));
-  summary.disposals.forEach((d) => cite(d.sources));
-  summary.checklist?.forEach((c) => cite(c.summary.sources));
-  const citedSources = sources
-    .map((s) => ({
-      ...s,
-      segments: s.segments.filter((seg) => citedKeys.has(`${s.fileName}|${s.kind === "pdf" ? (seg.page ?? "") : ""}|${seg.paragraph}`)),
-    }))
-    .filter((s) => s.segments.length > 0);
-  // 근거 문단이 하나도 없으면(드문 경우) 전체 원문을 보낸다
-  const sourcesForAi = citedSources.length > 0 ? citedSources : sources;
+  const sourcesForAi = pickCitedSources(summary, sources);
 
   const { lawsuitType: _type, glossary: _glossary, ...rest } = summary;
   void _type;
@@ -190,4 +196,46 @@ ${deadlineLines}
 
 ## 회신 원문 (정리 결과가 근거로 든 문단만)
 ${tagSources(sourcesForAi)}`;
+}
+
+/* ───────── 사건정보 대조 ───────── */
+
+const COMPARE_TOPIC_LINES = COMPARE_TOPICS.map((t) => `${t.id}. ${t.title}`).join("\n");
+
+export function compareInstructions(): string {
+  return `너는 법무법인 회신의 내용과 법원 '나의 사건검색' 사건정보를 비교하는 도우미다. 사용자는 법률전문가가 아닌 소송업무 담당자다.
+입력으로 (1) 회신 정리 결과 JSON, (2) 회신 원문 일부, (3) 법원 사건정보 원문이 온다. 두 곳의 내용이 같은지 다른지만 표시한다.
+
+[비교 주제 6개 — 1번부터 6번까지 순서대로 정확히 6개]
+${COMPARE_TOPIC_LINES}
+
+[칸마다 채울 것]
+- replySays: 그 주제에 대해 회신(정리 결과·회신 원문)이 말한 내용을 1~2문장으로. 회신이 다루지 않았으면 text를 정확히 "${NOT_IN_REPLY}", sources는 빈 배열.
+- courtSays: 그 주제에 대해 사건정보에 적힌 내용을 1~2문장으로. 사건정보에 없으면 text를 정확히 "${NOT_IN_COURT}", sources는 빈 배열.
+- 각 sources에는 근거가 된 줄의 꼬리표 값을 그대로 옮긴다 (fileName, page는 쪽 번호이고 "-"이면 null, paragraph).
+- result:
+  - "same": 두 쪽 모두 내용이 있고 서로 같다.
+  - "different": 두 쪽 모두 내용이 있는데 서로 다르다. 사소한 표기 차이(예: 2025. 3. 14. 과 2025-03-14)는 같은 것으로 본다. 날짜나 사람 이름이 다르면 다름이다.
+  - "not-comparable": 한쪽이라도 "${NOT_IN_REPLY}" 또는 "${NOT_IN_COURT}"이다.
+
+[규칙]
+- 회신 쪽은 회신에서만, 사건정보 쪽은 사건정보에서만 가져온다. 서로의 내용으로 채우지 않는다.
+- 날짜·사건번호·이름·법원 이름은 원문 표기를 그대로 옮긴다.
+- 회신 시점 이후에 진행된 일이 사건정보에만 있어서 서로 다르게 보이면 "different"로 표시하고, 설명에 그 점을 적는다 (예: 회신은 소 제기 전이라고 했지만 사건정보에는 소장이 접수됨).
+- 승소 가능성이나 소송 전략을 판단하지 않는다.
+모든 글은 한국어로 쓴다.`;
+}
+
+export function compareInput(summary: ReplySummary, sources: ExtractedSource[], caseInfo: ExtractedSource): string {
+  const { lawsuitType: _type, glossary: _glossary, ...rest } = summary;
+  void _type;
+  void _glossary;
+  return `## 회신 정리 결과
+${JSON.stringify(rest)}
+
+## 회신 원문 (정리 결과가 근거로 든 문단만)
+${tagSources(pickCitedSources(summary, sources))}
+
+## 법원 사건정보 원문
+${tagSources([caseInfo])}`;
 }

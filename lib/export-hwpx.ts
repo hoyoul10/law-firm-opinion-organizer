@@ -10,6 +10,7 @@ import { caseLabel, deadlineMessage, formatLocation } from "./labels";
 import {
   CHECKLIST_ITEMS,
   CHECKLIST_STATUS_LABELS,
+  COMPARE_RESULT_LABELS,
   LAWSUIT_TYPE_LABELS,
   NOT_IN_REPLY,
   type DownloadBundle,
@@ -117,6 +118,15 @@ export function hwpxParagraphs(bundle: DownloadBundle): string[] {
       add(
         `- ${d?.kind ?? ""} · ${d?.beneficiary ?? ""}${d?.subsequentAcquirer ? ` (전득자 ${d.subsequentAcquirer})` : ""}: 법률행위일 ${d?.legalActDate ?? "[확인 필요]"}, 1년 기한 ${r.oneYearEnd ?? "안 날 미입력"}, 5년 기한 ${r.fiveYearEnd ?? "[확인 필요]"}, 남은 날 ${r.daysLeft === null ? "[확인 필요]" : `${r.daysLeft}일`}`,
       );
+    }
+    add("");
+  }
+
+  if (bundle.compare) {
+    const diff = bundle.compare.items.filter((i) => i.result === "different").length;
+    add("사건정보 대조", `${diff > 0 ? `경고: 회신과 사건정보가 다른 항목이 ${diff}개 있습니다.` : "회신과 사건정보가 다른 항목은 없습니다."} (${bundle.compare.caseInfoFileName})`);
+    for (const i of bundle.compare.items) {
+      add(`${i.id}. ${i.topic} [${COMPARE_RESULT_LABELS[i.result]}]`, `  회신: ${i.replySays.text}${where(i.replySays.sources)}`, `  사건정보: ${i.courtSays.text}${where(i.courtSays.sources)}`);
     }
     add("");
   }

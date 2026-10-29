@@ -11,6 +11,7 @@ import DeadlineTable from "./DeadlineTable";
 import DraftEditor from "./DraftEditor";
 import ErrorNotice from "./ErrorNotice";
 import Glossary from "./Glossary";
+import CaseInfoCompare from "./CaseInfoCompare";
 import IssuesAndOpinion from "./IssuesAndOpinion";
 import { postJson } from "@/lib/api-client";
 import { computeDeadlines } from "@/lib/deadline";
@@ -19,7 +20,15 @@ import { downloadHtml } from "@/lib/export-html";
 import { downloadHwpx } from "@/lib/export-hwpx";
 import { splitEmailBody } from "@/lib/extract/email";
 import { getToday } from "@/lib/today";
-import type { DraftRequest, ExtractedSource, LawsuitDraft, ReplyInput, ReplySummary } from "@/lib/reply-types";
+import type {
+  CaseCompare,
+  CompareRequest,
+  DraftRequest,
+  ExtractedSource,
+  LawsuitDraft,
+  ReplyInput,
+  ReplySummary,
+} from "@/lib/reply-types";
 
 const noSubscribe = () => () => {};
 
@@ -48,6 +57,10 @@ export default function ReplyOrganizer() {
   const [draft, setDraft] = useState<LawsuitDraft | null>(null);
   /** 지금 화면의 결과를 내려받았는지. 내려받은 뒤 고치면 다시 false */
   const [downloaded, setDownloaded] = useState(false);
+  /** 담당자가 요청했을 때만 만드는 사건정보 대조 결과 (PLAN 29) */
+  const [compare, setCompare] = useState<CaseCompare | null>(null);
+  const [compareBusy, setCompareBusy] = useState(false);
+  const [compareError, setCompareError] = useState<string | null>(null);
 
   // 제척기간은 AI가 아니라 코드로, 안 날을 바꾸면 바로 다시 계산한다. "기타" 유형은 계산하지 않는다
   const deadlines = useMemo(
@@ -88,6 +101,23 @@ export default function ReplyOrganizer() {
     setSummary(result.data.summary);
     setSentSources(sources);
     setDraft(null);
+    setCompare(null);
+    setCompareError(null);
+    setDownloaded(false);
+  };
+
+  const runCompare = async (caseInfo: ExtractedSource) => {
+    if (!summary) return;
+    const body: CompareRequest = { summary, sources: sentSources, caseInfo };
+    setCompareBusy(true);
+    setCompareError(null);
+    const result = await postJson<{ compare: CaseCompare }>("/api/compare", body);
+    setCompareBusy(false);
+    if (!result.ok) {
+      setCompareError(result.message);
+      return;
+    }
+    setCompare(result.data.compare);
     setDownloaded(false);
   };
 
@@ -111,7 +141,7 @@ export default function ReplyOrganizer() {
   const download = async (format: "html" | "hwpx" = "html") => {
     if (!summary) return;
     if (remaining > 0 && !window.confirm(`초안에 [확인 필요] 표시가 ${remaining}곳 남아 있어요. 그래도 내려받을까요?`)) return;
-    const bundle = { createdAt: today, summary, deadlines, draft };
+    const bundle = { createdAt: today, summary, deadlines, draft, compare };
     if (format === "hwpx") await downloadHwpx(bundle);
     else downloadHtml(bundle);
     setDownloaded(true);
@@ -145,6 +175,7 @@ export default function ReplyOrganizer() {
           {summary.checklist && <ChecklistTable checklist={summary.checklist} />}
           <IssuesAndOpinion summary={summary} />
           <Glossary glossary={summary.glossary} />
+          <CaseInfoCompare compare={compare} busy={compareBusy} error={compareError} onCompare={(c) => void runCompare(c)} />
 
           <div className="flex flex-wrap items-center justify-end gap-3 border-t border-black/10 pt-4 dark:border-white/10">
             {isOther ? (

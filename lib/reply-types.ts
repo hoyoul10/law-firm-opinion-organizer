@@ -233,6 +233,53 @@ export interface LawsuitDraft {
 
 /* ───────── 내려받기 ───────── */
 
+/* ───────── nice. 사건정보 대조 (PLAN 29) ───────── */
+
+/** 사건정보(법원 '나의 사건검색' PDF)에 없는 내용 */
+export const NOT_IN_COURT = "사건정보에 없음";
+
+/** 대조 주제 6개 (순서 고정). 회신 정리 결과와 사건정보를 이 주제별로 비교한다 */
+export const COMPARE_TOPICS = [
+  { id: 1, title: "당사자(수익자·피고)" },
+  { id: 2, title: "사건 유형(사건명)" },
+  { id: 3, title: "소 제기 여부와 접수일" },
+  { id: 4, title: "보전처분(가처분·가압류) 진행" },
+  { id: 5, title: "관할 법원" },
+  { id: 6, title: "다음 기일·진행 상황" },
+] as const;
+
+/** same: 같음 / different: 다름 / not-comparable: 한쪽에 내용이 없어 비교할 수 없음 */
+export type CompareResult = "same" | "different" | "not-comparable";
+
+export const COMPARE_RESULT_LABELS: Record<CompareResult, string> = {
+  same: "일치",
+  different: "다름",
+  "not-comparable": "비교 불가",
+};
+
+export interface CompareItem {
+  id: number;
+  topic: string;
+  result: CompareResult;
+  /** 회신에서 말한 내용. 없으면 NOT_IN_REPLY */
+  replySays: CitedText;
+  /** 사건정보에 적힌 내용. 없으면 NOT_IN_COURT */
+  courtSays: CitedText;
+}
+
+/** 사건정보 대조 결과. 담당자가 필요할 때 [대조 요청]을 눌러야만 만든다 */
+export interface CaseCompare {
+  caseInfoFileName: string;
+  items: CompareItem[];
+}
+
+/** POST /api/compare 요청: 정리 결과 + 회신 원문 + 사건정보 PDF에서 뽑은 글자 */
+export interface CompareRequest {
+  summary: ReplySummary;
+  sources: ExtractedSource[];
+  caseInfo: ExtractedSource;
+}
+
 /** POST /api/draft 요청. 날짜·금액·이름을 원문과 대조하려고 원문 글자도 함께 보낸다 */
 export interface DraftRequest {
   summary: ReplySummary;
@@ -247,4 +294,6 @@ export interface DownloadBundle {
   deadlines: DeadlineSummary | null;
   /** "기타" 유형이면 초안 없이 정리 결과만 담는다 */
   draft: LawsuitDraft | null;
+  /** 담당자가 사건정보 대조를 요청했을 때만 있다 */
+  compare?: CaseCompare | null;
 }

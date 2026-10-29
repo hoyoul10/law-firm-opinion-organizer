@@ -2,9 +2,9 @@
 // 실행: npm run check:ai-output  (OpenAI를 부르지 않으므로 비용이 들지 않는다)
 
 import { zodTextFormat } from "openai/helpers/zod";
-import { NOT_IN_REPLY, type ReplyInput } from "../lib/reply-types";
-import { ReplyInputSchema, SummaryOutputSchema, type SummaryOutput } from "../lib/server/schemas";
-import { validateDraftOutput, validateSummaryOutput } from "../lib/server/validate";
+import { NOT_IN_REPLY, type ExtractedSource, type ReplyInput } from "../lib/reply-types";
+import { ReplyInputSchema, SummaryOutputSchema, type CompareOutput, type SummaryOutput } from "../lib/server/schemas";
+import { validateCompareOutput, validateDraftOutput, validateSummaryOutput } from "../lib/server/validate";
 import { countNeedsCheck } from "../lib/draft";
 import { draftInput } from "../lib/server/prompts";
 import { computeDeadline, computeDeadlines } from "../lib/deadline";
@@ -212,6 +212,52 @@ check("맞는 요청 통과", ReplyInputSchema.safeParse(input).success);
 check("원문이 하나도 없으면 막음", !ReplyInputSchema.safeParse({ ...input, sources: [] }).success);
 check("안 날이 오늘 이후면 막음", !ReplyInputSchema.safeParse({ ...input, cancellationKnownDate: "2999-01-01" }).success);
 check("차수가 1·2가 아니면 막음", !ReplyInputSchema.safeParse({ ...input, sources: [{ ...input.sources[0], round: 3 }] }).success);
+
+console.log("\n■ 사건정보 대조 검사 (PLAN 29)");
+{
+  const court: ExtractedSource = {
+    fileName: "사건정보.pdf",
+    kind: "pdf",
+    round: 1,
+    segments: [
+      { page: 1, paragraph: 1, text: "접수일 2026.10.27 소장접수" },
+      { page: 1, paragraph: 2, text: "피고 남수익" },
+      { page: 1, paragraph: 3, text: "서울중앙지방법원" },
+    ],
+  };
+  const mail2 = { fileName: "이메일 본문", page: null, paragraph: 2 };
+  const ct = (n: number) => ({ fileName: "사건정보.pdf", page: 1, paragraph: n });
+  const missingCourt = { text: "사건정보에 없음", sources: [] };
+  const base = (): CompareOutput => ({
+    items: [
+      { id: 1, result: "same", replySays: { text: "피고는 남수익", sources: [mail2] }, courtSays: { text: "피고 남수익", sources: [ct(2)] } },
+      { id: 2, result: "not-comparable", replySays: { text: "사해행위취소", sources: [mail2] }, courtSays: missingCourt },
+      { id: 3, result: "same", replySays: { text: "소 제기 전 (회신 2026. 10. 24.)", sources: [mail2] }, courtSays: { text: "2026.10.27 소장접수", sources: [ct(1)] } },
+      { id: 4, result: "not-comparable", replySays: missing, courtSays: missingCourt },
+      { id: 5, result: "different", replySays: { text: "부산지방법원", sources: [mail2] }, courtSays: { text: "서울중앙지방법원", sources: [ct(3)] } },
+      { id: 6, result: "not-comparable", replySays: missing, courtSays: missingCourt },
+    ],
+  });
+  const run = (mutate: (o: CompareOutput) => void) => {
+    const o = base();
+    mutate(o);
+    return validateCompareOutput(o, input.sources, court);
+  };
+  const ok = run(() => {});
+  check("맞는 대조 결과 통과", ok.ok, ok.ok ? "" : ok.problems.join(" / "));
+  check("주제 6개가 순서대로 만들어짐", ok.ok && ok.compare.items.map((i) => i.id).join() === "1,2,3,4,5,6");
+  check("날짜가 서로 다르면 일치를 다름으로 바꿈 (2026. 10. 24. ≠ 2026.10.27)", ok.ok && ok.compare.items[2].result === "different");
+  check("한쪽이 없으면 비교 불가로 고정", ok.ok && ok.compare.items[1].result === "not-comparable" && ok.compare.items[3].result === "not-comparable");
+  check("양쪽 모두 없으면 비교 불가", ok.ok && ok.compare.items[5].result === "not-comparable");
+  const forced = run((o) => { o.items[1].result = "different"; });
+  check("한쪽이 없는데 다름이라 해도 비교 불가로 고침", forced.ok && forced.compare.items[1].result === "not-comparable");
+  check("주제가 5개면 막음", !run((o) => { o.items.pop(); }).ok);
+  check("양쪽에 내용이 있는데 비교 불가면 막음", !run((o) => { o.items[0].result = "not-comparable"; }).ok);
+  check("사건정보에 없는 위치를 대면 막음", !run((o) => { o.items[0].courtSays.sources = [{ fileName: "사건정보.pdf", page: 9, paragraph: 9 }]; }).ok);
+  check("원문 위치 없이 내용만 있으면 막음", !run((o) => { o.items[4].courtSays.sources = []; }).ok);
+  const unknownDate = run((o) => { o.items[0].courtSays.text = "피고 남수익 (2030. 1. 1. 접수)"; });
+  check("사건정보에 없는 날짜에는 [확인 필요]", unknownDate.ok && unknownDate.compare.items[0].courtSays.text.includes("[확인 필요](원문에 없는 날짜)"));
+}
 
 async function hwpxChecks() {
   console.log("\n■ hwpx 내려받기 (PLAN 30)");
