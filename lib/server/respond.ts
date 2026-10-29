@@ -52,7 +52,10 @@ export function rejectForeignRequest(request: Request): Response | null {
  * 안 날(날짜) 문제는 날짜 안내로, 글자·문단·자료가 너무 많으면 "너무 길다"로, 그 밖에는 "입력을 확인해 주세요"로.
  */
 export function errorFromParse(error: ZodError): Response {
-  if (error.issues.some((i) => i.path.join(".").endsWith("cancellationKnownDate"))) return errorResponse("INVALID_DATE");
+  // 날짜 값이 있는데 형식이 틀리거나 오늘 이후인 경우만 날짜 안내 (필드가 아예 빠진 요청은 일반 입력 오류)
+  if (error.issues.some((i) => i.path.join(".").endsWith("cancellationKnownDate") && i.code !== "invalid_type")) {
+    return errorResponse("INVALID_DATE");
+  }
   if (error.issues.some((i) => i.code === "too_big")) return errorResponse("PAYLOAD_TOO_LARGE");
   return errorResponse("INVALID_INPUT");
 }
