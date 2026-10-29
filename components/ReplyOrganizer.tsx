@@ -13,6 +13,7 @@ import ErrorNotice from "./ErrorNotice";
 import Glossary from "./Glossary";
 import CaseInfoCompare from "./CaseInfoCompare";
 import IssuesAndOpinion from "./IssuesAndOpinion";
+import Mascot from "./Mascot";
 import { postJson } from "@/lib/api-client";
 import { computeDeadlines } from "@/lib/deadline";
 import { countNeedsCheck } from "@/lib/draft";
@@ -278,6 +279,12 @@ export default function ReplyOrganizer() {
               </>
             ) : (
               <>
+                {busy === "draft" && (
+                  <span className="flex items-center gap-2 text-base font-semibold text-[var(--brand-strong)]">
+                    <Mascot name="go" size={56} />
+                    초안을 쓰고 있어요!
+                  </span>
+                )}
                 {needsCaseLabel && <span className="text-base muted">사건 표시를 먼저 정해 주세요.</span>}
                 {/* 담당자·검토자 참고용 정리 결과(점검표·제척기간·원문 위치)만 받고 싶을 때. 초안이 있어도 받을 수 있다 */}
                 <button
@@ -322,7 +329,11 @@ export default function ReplyOrganizer() {
             }}
           />
           <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--line)] pt-5">
-            {downloaded && <span className="text-base font-semibold text-[var(--ok-fg)]">✓ 내려받았어요</span>}
+            {downloaded && (
+              <span className="flex items-center gap-2 text-base font-semibold text-[var(--ok-fg)]">
+                <Mascot name="thanks" size={56} />✓ 내려받았어요. 수고하셨어요!
+              </span>
+            )}
             <button
               type="button"
               onClick={() => void download("hwpx")}

@@ -12,11 +12,14 @@
   --line: #d3dce7;
   --muted: #566274;
 
-  --brand: #005bac; /* 주 색: 버튼, 제목 강조 */
-  --brand-strong: #003f7d;
-  --brand-navy: #0a2f5c; /* 머리띠 */
-  --brand-tint: #e6f0fa;
-  --accent: #00857c; /* 보조 색: 완료·통과 */
+  /* 캠코 CI 공식 색: KAMCO Blue(RGB 9,31,95), KAMCO Red(RGB 255,0,80) — 공식 홈페이지 캠코CI 설명 */
+  --kamco-blue: #091f5f;
+  --kamco-red: #ff0050;
+  --brand: #1f4aa8; /* 주 색: 버튼 (공식 파랑보다 밝게 해서 글자와 구분) */
+  --brand-strong: #091f5f; /* 제목 강조 */
+  --brand-navy: #091f5f; /* 머리띠 */
+  --brand-tint: #e8edf8;
+  --accent: #ff0050; /* 머리띠 밑줄 */
 
   --ok-bg: #e4f4ec;
   --ok-fg: #0b6b40;
@@ -46,11 +49,11 @@
     --line: #2b3b4f;
     --muted: #9aaabd;
 
-    --brand: #4ea1f0;
-    --brand-strong: #7bbcf5;
-    --brand-navy: #0a1f38;
-    --brand-tint: #17304d;
-    --accent: #3cc0b5;
+    --brand: #6f93e6;
+    --brand-strong: #a9bdf2;
+    --brand-navy: #091f5f;
+    --brand-tint: #1a2a52;
+    --accent: #ff4d83;
 
     --ok-bg: #123a29;
     --ok-fg: #7fe0ae;
@@ -318,7 +321,7 @@ body {
 
 /* 머리띠 */
 .site-header {
-  background: linear-gradient(90deg, var(--brand-navy), var(--brand-strong));
+  background: var(--kamco-blue);
   color: #fff;
   border-bottom: 4px solid var(--accent);
 }

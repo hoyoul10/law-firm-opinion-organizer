@@ -10,6 +10,7 @@ import { safeFileName } from "@/lib/extract/shared";
 import type { ExtractResult } from "@/lib/extract/types";
 import { LAWSUIT_TYPE_LABELS, type LawsuitType, type ReplyRound } from "@/lib/reply-types";
 import FileList, { type UploadedFile } from "./FileList";
+import Mascot from "./Mascot";
 import RoundSelect from "./RoundSelect";
 
 export interface InputState {
@@ -268,6 +269,12 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-3">
+        {busy && (
+          <span className="flex items-center gap-2 text-base font-semibold text-[var(--brand-strong)]">
+            <Mascot name="go" size={56} />
+            키우미가 열심히 읽고 있어요!
+          </span>
+        )}
         {blocker && !busy && <span className="text-base muted">{blocker}</span>}
         <button
           type="button"
