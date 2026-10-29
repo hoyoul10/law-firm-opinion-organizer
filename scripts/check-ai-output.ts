@@ -3,11 +3,11 @@
 
 import { zodTextFormat } from "openai/helpers/zod";
 import { NOT_IN_REPLY, type ExtractedSource, type ReplyInput } from "../lib/reply-types";
-import { ReplyInputSchema, SummaryOutputSchema, type CompareOutput, type SummaryOutput } from "../lib/server/schemas";
-import { validateCompareOutput, validateDraftOutput, validateSummaryOutput } from "../lib/server/validate";
+import { OcrRequestSchema, ReplyInputSchema, SummaryOutputSchema, type CompareOutput, type SummaryOutput } from "../lib/server/schemas";
+import { validateCompareOutput, validateDraftOutput, validateOcrOutput, validateSummaryOutput } from "../lib/server/validate";
 import { errorFromParse } from "../lib/server/respond";
 import { countNeedsCheck } from "../lib/draft";
-import { draftInput } from "../lib/server/prompts";
+import { draftInput, summarizeInstructions, tagSources } from "../lib/server/prompts";
 import { computeDeadline, computeDeadlines } from "../lib/deadline";
 import JSZip from "jszip";
 import { buildHwpx, hwpxFileName } from "../lib/export-hwpx";
@@ -277,6 +277,36 @@ console.log("\n■ 사건정보 대조 검사 (PLAN 29)");
   o2.items[0].courtSays = { text: "사건번호 2026가합12345, 피고 남수익", sources: [ct(4)] };
   const knownCase = validateCompareOutput(o2, input.sources, courtWithNo);
   check("원문에 있는 사건번호와 '2026년' 같은 날짜 표기에는 붙이지 않음", knownCase.ok && !knownCase.compare.items[0].courtSays.text.includes("확인 필요"));
+}
+
+console.log("\n■ OCR (PLAN 33)");
+{
+  const out = (pages: { page: number; paragraphs: string[] }[]) => ({ pages });
+  const okOcr = validateOcrOutput(out([{ page: 1, paragraphs: ["  1. 사안의   개요 ", "- 1 / 3 -", "채무자는 2025. 3. 14. 매도"] }, { page: 2, paragraphs: [] }]), [1, 2]);
+  check("맞는 OCR 결과 통과", okOcr.ok, okOcr.ok ? "" : okOcr.problems.join(" / "));
+  check("공백을 정리하고 쪽 번호만 있는 줄은 걸러냄", okOcr.ok && okOcr.pages[0].paragraphs.join("|") === "1. 사안의 개요|채무자는 2025. 3. 14. 매도");
+  check("글자가 없는 쪽(빈 배열)은 허용", okOcr.ok && okOcr.pages[1].paragraphs.length === 0);
+  check("요청한 쪽이 빠지면 막음", !validateOcrOutput(out([{ page: 1, paragraphs: ["내용"] }]), [1, 2]).ok);
+  check("요청하지 않은 쪽이 있으면 막음", !validateOcrOutput(out([{ page: 1, paragraphs: ["내용"] }, { page: 9, paragraphs: ["내용"] }]), [1]).ok);
+  check("같은 쪽이 두 번 오면 막음", !validateOcrOutput(out([{ page: 1, paragraphs: ["내용"] }, { page: 1, paragraphs: ["내용"] }]), [1, 1]).ok);
+  check("모든 쪽이 비어 있으면(글자를 못 읽음) 막음", !validateOcrOutput(out([{ page: 1, paragraphs: [] }, { page: 2, paragraphs: ["  ", "- 2 -"] }]), [1, 2]).ok);
+  check("쪽 순서대로 정렬", validateOcrOutput(out([{ page: 3, paragraphs: ["셋"] }, { page: 1, paragraphs: ["하나"] }]), [1, 3]).ok);
+
+  const jpeg = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+  check("JPEG 그림 요청 통과", OcrRequestSchema.safeParse({ pages: [{ page: 1, image: jpeg }] }).success);
+  check("JPEG가 아닌 그림은 막음", !OcrRequestSchema.safeParse({ pages: [{ page: 1, image: "data:image/png;base64,AAAA" }] }).success);
+  check("그림이 아닌 글을 보내면 막음", !OcrRequestSchema.safeParse({ pages: [{ page: 1, image: "http://evil.example/x.jpg" }] }).success);
+  const seven = OcrRequestSchema.safeParse({ pages: Array.from({ length: 7 }, (_, i) => ({ page: i + 1, image: jpeg })) });
+  check("한 번에 7쪽을 보내면 막음", !seven.success);
+  check("그림 한 장이 너무 크면 막음", !OcrRequestSchema.safeParse({ pages: [{ page: 1, image: "data:image/jpeg;base64," + "A".repeat(1_000_001) }] }).success);
+
+  const tag = tagSources([{ fileName: "스캔.pdf", kind: "pdf", round: 1, ocr: true, segments: [{ page: 1, paragraph: 1, text: "본문" }] }]);
+  check("OCR로 읽은 자료는 꼬리표에 OCR 표시", tag.startsWith("[스캔.pdf | 1차·OCR | 1 | 1]"), tag);
+  const plain = tagSources([{ fileName: "일반.pdf", kind: "pdf", round: 2, segments: [{ page: 1, paragraph: 1, text: "본문" }] }]);
+  check("일반 자료에는 OCR 표시가 없음", plain.startsWith("[일반.pdf | 2차 보완 | 1 | 1]"), plain);
+  check("정리 지시문에 OCR 줄 처리 규칙이 있음", summarizeInstructions("fraudulent-transfer").includes("OCR로 읽은 줄"));
+  const ocrHtml = buildDownloadHtml({ createdAt: "2026-10-28", summary: good.ok ? good.summary : (undefined as never), deadlines: null, draft: null, ocrFileNames: ["스캔<1>.pdf"] });
+  check("내려받는 HTML에 OCR 안내(특수문자 처리 포함)", ocrHtml.includes("OCR(AI 글자 인식)로 읽은 파일") && ocrHtml.includes("스캔&lt;1&gt;.pdf"));
 }
 
 async function hwpxChecks() {

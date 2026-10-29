@@ -3,6 +3,7 @@
 // PDF에는 문단 정보가 없어서, 줄 간격이 평소보다 넓으면 새 문단으로 본다.
 
 import type { ExtractedSource, ReplyRound, TextSegment } from "../reply-types";
+import { PAGE_NUMBER } from "./shared";
 import type { ExtractResult } from "./types";
 
 interface Line {
@@ -18,7 +19,7 @@ type TextItem = { str: string; transform: number[]; width: number; height: numbe
 type PdfJs = typeof import("pdfjs-dist");
 let pdfjsPromise: Promise<PdfJs> | null = null;
 
-function loadPdfJs(): Promise<PdfJs> {
+export function loadPdfJs(): Promise<PdfJs> {
   if (!pdfjsPromise) {
     pdfjsPromise = import("pdfjs-dist")
       .then((pdfjs) => {
@@ -56,8 +57,6 @@ function toLines(items: TextItem[]): Line[] {
   return lines;
 }
 
-/** "- 1 / 3 -", "2", "3쪽" 같은 쪽 번호만 있는 줄 */
-const PAGE_NUMBER = /^[-–\s]*\d+\s*(\/\s*\d+)?\s*(쪽|page)?[-–\s]*$/i;
 
 /** 문단 머리 표시: [제목], ①, 1., 가., Ⅰ., -, ※ 등 */
 const PARAGRAPH_MARKER = /^(\[[^\]]{1,15}\]|[①-⑳]|\d{1,2}[.)]\s|[가-하][.)]\s|[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ][.)]?\s|[-※•■□○●▶]\s?)/;

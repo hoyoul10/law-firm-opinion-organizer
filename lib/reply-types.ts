@@ -41,6 +41,8 @@ export interface ExtractedSource {
   fileName: string;
   kind: SourceKind;
   round: ReplyRound;
+  /** 스캔본을 OCR(AI 글자 인식)로 읽은 자료. 글자 인식 오류가 있을 수 있다 */
+  ocr?: boolean;
   segments: TextSegment[];
 }
 
@@ -233,6 +235,34 @@ export interface LawsuitDraft {
 
 /* ───────── 내려받기 ───────── */
 
+/* ───────── OCR (PLAN 33): 스캔한 PDF를 쪽 그림으로 만들어 AI가 글자로 읽는다 ───────── */
+
+/** OCR 요청 한 번에 보내는 쪽 수 */
+export const OCR_PAGES_PER_REQUEST = 4;
+
+/** 쪽 그림 한 장. image는 "data:image/jpeg;base64,..." 형식 */
+export interface OcrPageImage {
+  page: number;
+  image: string;
+}
+
+export interface OcrRequest {
+  pages: OcrPageImage[];
+}
+
+/** OCR로 읽은 쪽 하나. 문단은 위에서 아래 순서 */
+export interface OcrPageText {
+  page: number;
+  paragraphs: string[];
+}
+
+export interface OcrResponse {
+  pages: OcrPageText[];
+}
+
+/** AI가 글자를 알아볼 수 없을 때 그 자리에 적는 표시 */
+export const UNREADABLE = "[판독불가]";
+
 /* ───────── nice. 사건정보 대조 (PLAN 29) ───────── */
 
 /** 사건정보(법원 '나의 사건검색' PDF)에 없는 내용 */
@@ -296,4 +326,6 @@ export interface DownloadBundle {
   draft: LawsuitDraft | null;
   /** 담당자가 사건정보 대조를 요청했을 때만 있다 */
   compare?: CaseCompare | null;
+  /** OCR로 읽은 파일 이름들. 내려받는 파일에 "인식 오류 가능" 안내를 넣는다 */
+  ocrFileNames?: string[];
 }

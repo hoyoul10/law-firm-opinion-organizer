@@ -199,3 +199,28 @@ export const CompareOutputSchema = z.object({
 });
 
 export type CompareOutput = z.infer<typeof CompareOutputSchema>;
+
+/* ───────── OCR ───────── */
+
+/** POST /api/ocr 요청: 쪽 그림(JPEG) 최대 6장. 한 장은 base64 글자 100만 자(약 750KB)까지 */
+export const OcrRequestSchema = z.object({
+  pages: z
+    .array(
+      z.object({
+        page: z.number().int().min(1).max(2_000),
+        image: z
+          .string()
+          .max(1_000_000)
+          .regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/, "JPEG 그림이 아니에요"),
+      }),
+    )
+    .min(1)
+    .max(6),
+});
+
+/** AI가 돌려주는 OCR 결과: 쪽마다 문단 목록 */
+export const OcrOutputSchema = z.object({
+  pages: z.array(z.object({ page: z.number().int(), paragraphs: z.array(z.string()) })),
+});
+
+export type OcrOutput = z.infer<typeof OcrOutputSchema>;

@@ -19,12 +19,14 @@ import {
   type DeadlineSummary,
   type ExtractedSource,
   type LawsuitDraft,
+  type OcrPageText,
   type ReplyInput,
   type ReplySummary,
   type SourceLocation,
 } from "../reply-types";
+import { PAGE_NUMBER } from "../extract/shared";
 import { NO_DISPOSAL_ID } from "./prompts";
-import type { CitedTextOutput, CompareOutput, DraftOutput, LocationOutput, SummaryOutput } from "./schemas";
+import type { CitedTextOutput, CompareOutput, DraftOutput, LocationOutput, OcrOutput, SummaryOutput } from "./schemas";
 
 export type ValidationResult =
   | { ok: true; summary: ReplySummary }
@@ -400,4 +402,32 @@ export function validateCompareOutput(
   });
 
   return problems.length > 0 ? { ok: false, problems } : { ok: true, compare: { caseInfoFileName: caseInfo.fileName, items } };
+}
+
+/* ───────── OCR 결과 검사 ───────── */
+
+export type OcrValidationResult = { ok: true; pages: OcrPageText[] } | { ok: false; problems: string[] };
+
+/**
+ * OCR 결과 검사. 요청한 쪽이 빠짐없이 그대로 돌아왔는지, 쪽 번호만 있는 줄을 걸러내고,
+ * 모든 쪽이 비어 있으면(글자를 하나도 못 읽음) 실패로 본다.
+ */
+export function validateOcrOutput(output: OcrOutput, requestedPages: number[]): OcrValidationResult {
+  const problems: string[] = [];
+  const got = output.pages.map((p) => p.page);
+  const sameSet = got.length === requestedPages.length && requestedPages.every((p) => got.includes(p)) && new Set(got).size === got.length;
+  if (!sameSet) problems.push(`쪽 번호가 요청과 다름 (요청: ${requestedPages.join(",")}, 받은 것: ${got.join(",") || "없음"})`);
+
+  const pages: OcrPageText[] = output.pages
+    .map((p) => ({
+      page: p.page,
+      paragraphs: p.paragraphs.map((t) => t.replace(/\s+/g, " ").trim()).filter((t) => t && !PAGE_NUMBER.test(t)),
+    }))
+    .sort((a, b) => a.page - b.page);
+
+  if (pages.every((p) => p.paragraphs.length === 0)) problems.push("글자를 하나도 읽지 못함");
+  const tooLong = pages.flatMap((p) => p.paragraphs).find((t) => t.length > 20_000);
+  if (tooLong) problems.push("한 문단이 2만 자를 넘음");
+
+  return problems.length > 0 ? { ok: false, problems } : { ok: true, pages };
 }

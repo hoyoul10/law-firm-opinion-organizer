@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { extractFile } from "@/lib/extract";
+import { ocrPdf } from "@/lib/extract/ocr";
 import type { ExtractResult } from "@/lib/extract/types";
 import { LAWSUIT_TYPE_LABELS, type LawsuitType, type ReplyRound } from "@/lib/reply-types";
 import FileList, { type UploadedFile } from "./FileList";
@@ -30,6 +31,7 @@ const ACCEPT = ".pdf,.hwpx";
 
 /** 정리하기를 누를 수 있는지와, 못 누르면 그 이유 */
 export function submitBlocker(input: InputState): string | null {
+  if (input.files.some((f) => f.ocr)) return "OCR로 읽는 중이에요.";
   if (input.files.some((f) => f.result === null)) return "파일을 읽는 중이에요.";
   if (input.files.some((f) => f.result && !f.result.ok)) return "⚠ 표시된 파일을 빼야 정리할 수 있어요.";
   if (input.files.length === 0 && input.emailBody.trim() === "") return "회신 파일이나 이메일 본문을 넣어 주세요.";
@@ -70,6 +72,8 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
   const [notice, setNotice] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const started = useRef(new Set<string>());
+  /** OCR 진행 중인 파일마다 취소 장치 */
+  const aborts = useRef(new Map<string, AbortController>());
   const filesRef = useRef(value.files);
 
   useEffect(() => {
@@ -89,6 +93,26 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
       );
     }
   }, [value.files, setValue]);
+
+  // 스캔 PDF를 OCR로 읽는다 (담당자가 [OCR로 읽기]를 눌렀을 때만)
+  const startOcr = (id: string) => {
+    const f = filesRef.current.find((x) => x.id === id);
+    if (!f || f.ocr) return;
+    const controller = new AbortController();
+    aborts.current.set(id, controller);
+    const patch = (change: Partial<UploadedFile>) =>
+      setValue((prev) => ({ ...prev, files: prev.files.map((x) => (x.id === id ? { ...x, ...change } : x)) }));
+    patch({ ocr: { done: 0, total: 0 } });
+    void ocrPdf(f.file, f.round, f.displayName, (done, total) => patch({ ocr: { done, total } }), controller.signal).then((result) => {
+      aborts.current.delete(id);
+      setValue((prev) => ({
+        ...prev,
+        files: prev.files.map((x) => (x.id === id ? { ...x, ocr: undefined, result: withRound(result, x.round) } : x)),
+      }));
+    });
+  };
+
+  const cancelOcr = (id: string) => aborts.current.get(id)?.abort();
 
   const addFiles = (list: FileList | null) => {
     if (!list) return;
@@ -180,7 +204,12 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
           files={value.files}
           disabled={busy}
           onRoundChange={changeRound}
-          onRemove={(id) => setValue((prev) => ({ ...prev, files: prev.files.filter((f) => f.id !== id) }))}
+          onRemove={(id) => {
+            aborts.current.get(id)?.abort();
+            setValue((prev) => ({ ...prev, files: prev.files.filter((f) => f.id !== id) }));
+          }}
+          onOcr={startOcr}
+          onCancelOcr={cancelOcr}
         />
       </div>
 

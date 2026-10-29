@@ -9,6 +9,7 @@ import {
   NEEDS_CHECK,
   NOT_IN_COURT,
   NOT_IN_REPLY,
+  UNREADABLE,
   type ExtractedSource,
   type DeadlineSummary,
   type LawsuitType,
@@ -20,7 +21,7 @@ export function tagSources(sources: ExtractedSource[]): string {
   return sources
     .flatMap((source) =>
       source.segments.map((seg) => {
-        const round = source.round === 2 ? "2차 보완" : "1차";
+        const round = (source.round === 2 ? "2차 보완" : "1차") + (source.ocr ? "·OCR" : "");
         const page = source.kind === "pdf" && seg.page ? String(seg.page) : "-";
         return `[${source.fileName} | ${round} | ${page} | ${seg.paragraph}] ${seg.text.replace(/\s+/g, " ").trim()}`;
       }),
@@ -79,6 +80,11 @@ ${CHECKLIST_LINES}
 [원문 위치 규칙]
 - 모든 sources, firstSeen에는 근거가 된 줄의 꼬리표 값을 그대로 옮긴다: fileName은 파일 이름, page는 쪽 번호(쪽이 "-"이면 null), paragraph는 문단 번호.
 - 꼬리표에 없는 위치를 만들지 않는다.
+
+[OCR로 읽은 줄]
+- 꼬리표의 차수 칸에 "OCR"가 붙은 줄(예: 1차·OCR)은 스캔한 그림을 AI가 글자로 읽은 것이라 글자 인식 오류가 있을 수 있다.
+- 그 줄에서 가져온 날짜·금액·이름·사건번호가 흐리거나 앞뒤가 맞지 않아 믿기 어려우면, 해당 글 맨 앞에 "${NEEDS_CHECK}"를 붙이고 이유를 적는다.
+- "${UNREADABLE}"로 표시된 부분의 내용은 추측하지 않는다.
 
 [지어내기 금지]
 - 회신에 없는 사실을 만들지 않는다. 회신이 다루지 않은 내용은 text를 정확히 "${NOT_IN_REPLY}"로, sources를 빈 배열로 둔다.
@@ -238,4 +244,20 @@ ${tagSources(pickCitedSources(summary, sources))}
 
 ## 법원 사건정보 원문
 ${tagSources([caseInfo])}`;
+}
+
+/* ───────── OCR ───────── */
+
+export function ocrInstructions(): string {
+  return `너는 스캔한 문서 그림에서 글자를 그대로 옮겨 적는 도구다. 그림은 법무법인 검토회신(한국어 법률 문서)의 쪽들이다.
+
+[규칙]
+- 그림에 보이는 글자를 있는 그대로 옮겨 적는다. 요약하거나 고치거나 다시 쓰거나 번역하지 않는다. 맞춤법·띄어쓰기도 보이는 대로 둔다.
+- 문단 단위로 나눠 위에서 아래 순서대로 paragraphs에 담는다. 제목·번호가 붙은 항목("1. 사안의 개요" 등)은 따로 한 문단으로 둔다. 같은 문단이 줄바꿈으로 여러 줄이면 한 문단으로 이어 붙인다.
+- 쪽 번호만 있는 줄, 반복되는 머리글·바닥글은 적지 않는다.
+- 날짜·금액·사건번호·이름 같은 숫자와 고유명사는 특히 정확하게 읽는다. 쉼표·마침표·단위(원, 년, 월, 일)도 그대로 옮긴다.
+- 글자가 흐리거나 가려져 알아볼 수 없는 부분은 추측하지 말고 "${UNREADABLE}"로 적는다.
+- 도장·서명·손글씨는 읽을 수 있으면 옮기고, 읽을 수 없으면 "${UNREADABLE}"로 적는다.
+- 표는 칸 순서대로 한 줄로 이어서 적는다 (예: "접수일 2026.10.27 소장접수").
+- 입력으로 받은 쪽마다 page에 입력의 쪽 번호를 그대로 쓴다. 글자가 하나도 없는 쪽은 paragraphs를 빈 배열로 둔다.`;
 }

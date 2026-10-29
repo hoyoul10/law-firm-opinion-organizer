@@ -84,6 +84,8 @@ PRD의 **must 2개**(회신 정리·누락 점검, 소송 의뢰 초안 생성·
 32. 글자 수 상한을 "PDF 50장 이하" 기준으로 올리고, 50장 분량 가명 회신으로 정리·초안 시간과 비용을 재서 시간 제한(110·120초)이 모자라는지 확인하기 → `app/api/summarize/route.ts`, `app/api/draft/route.ts`, `lib/server/openai.ts` → (완료) 49쪽 116,390자 가명 회신으로 정리 32초·초안 12초·점검 10항목 정답, 상한 정리 20만자·초안 25만자. 초안 AI 입력을 근거 문단만으로 줄여 한 건 약 0.13달러 (DESIGN 11장)
 - **스캔 PDF는 지금처럼 정리를 멈춘다** (변경 없음). **정리 속도와 정확도 설정(`medium`)도 그대로 둔다.**
 
+33. 스캔 PDF를 OCR(AI 글자 인식)로 읽기 — **담당자 요청 2026-10-29** (PRD 비범위 8번을 범위로 변경). [OCR로 읽기] 버튼을 누를 때만 쪽 그림을 서버로 보내 읽고, 인식 오류 가능을 알림 → `lib/extract/ocr.ts`, `app/api/ocr/route.ts`, `components/FileList.tsx`, 샘플 `samples/edge-cases/edge-4_*` (완료, DESIGN 13.3)
+
 ### nice (must 완료 후에만 — 담당자가 먼저 요청해 구현 대기, 설계는 DESIGN 13장)
 
 29. 법원 '나의 사건검색' PDF를 올려 회신의 주요 날짜·진행상황과 대조하고, 다른 항목 표시하기 — **담당자 결정:** 평소에는 올리지 않고, 필요할 때만 사건정보 PDF를 올려 "대조 요청" 버튼을 눌렀을 때만 비교한다 (정리하기와 별도 동작). 가명 샘플 PDF 필요 → `app/api/compare/route.ts`, `components/CaseInfoCompare.tsx`, `lib/server/validate.ts`, 샘플 `samples/court/` (완료)

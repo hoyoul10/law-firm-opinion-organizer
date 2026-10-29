@@ -4,6 +4,7 @@
 import "server-only";
 import OpenAI, { APIConnectionTimeoutError, APIError } from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
+import type { ResponseInput } from "openai/resources/responses/responses";
 import type { z } from "zod";
 import type { ApiErrorCode } from "../api-errors";
 
@@ -57,7 +58,10 @@ export async function requestStructured<S extends z.ZodType>(options: {
   schema: S;
   schemaName: string;
   instructions: string;
-  input: string;
+  /** 글(정리·초안·대조) 또는 글+이미지(OCR) */
+  input: string | ResponseInput;
+  /** 따져 보는 정도. 글자를 옮겨 적는 OCR은 "low"로 충분하다 (기본은 getReasoningEffort) */
+  effort?: ReasoningEffort;
 }): Promise<z.infer<S>> {
   try {
     const response = await getOpenAI().responses.parse({
@@ -65,7 +69,7 @@ export async function requestStructured<S extends z.ZodType>(options: {
       instructions: options.instructions,
       input: options.input,
       text: { format: zodTextFormat(options.schema, options.schemaName) },
-      reasoning: { effort: getReasoningEffort() },
+      reasoning: { effort: options.effort ?? getReasoningEffort() },
       // 한 번 호출의 출력 비용 상한 (생각 토큰 포함). 샘플 실측이 수천 토큰이라 넉넉히 잡았다
       max_output_tokens: MAX_OUTPUT_TOKENS,
       store: false,

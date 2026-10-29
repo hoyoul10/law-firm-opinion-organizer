@@ -24,7 +24,7 @@ export function errorResponse(code: ApiErrorCode): Response {
 export function logFailure(
   route: string,
   code: ApiErrorCode,
-  detail: { chars?: number; problems?: number; status?: number } = {},
+  detail: { chars?: number; problems?: number; status?: number; pages?: number } = {},
 ) {
   const parts = Object.entries(detail)
     .filter(([, v]) => v !== undefined)

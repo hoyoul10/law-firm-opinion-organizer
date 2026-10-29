@@ -54,6 +54,11 @@ export function buildDownloadHtml(bundle: DownloadBundle): string {
 <tr><th>법무법인</th><td>${e(summary.firmName ?? NOT_IN_REPLY)}</td></tr>
 <tr><th>소송 유형</th><td>${e(LAWSUIT_TYPE_LABELS[summary.lawsuitType])}</td></tr></table>`);
 
+  // 2-2. OCR 안내
+  if (bundle.ocrFileNames && bundle.ocrFileNames.length > 0) {
+    parts.push(`<p class="notice">ⓘ 스캔본이라 OCR(AI 글자 인식)로 읽은 파일: ${bundle.ocrFileNames.map(e).join(", ")}. 글자를 잘못 읽었을 수 있으니 날짜·금액·이름·사건번호는 원본과 대조해 주세요.</p>`);
+  }
+
   // 3. 경고
   if (summary.typeMismatchWarning) parts.push(`<p class="notice">⚠ ${e(summary.typeMismatchWarning)} (고른 소송 유형은 바꾸지 않음)</p>`);
   if (remaining > 0) parts.push(`<p class="notice danger">⚠ 초안에 [확인 필요] 표시가 ${remaining}곳 남아 있습니다.</p>`);

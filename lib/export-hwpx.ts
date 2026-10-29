@@ -96,6 +96,9 @@ export function hwpxParagraphs(bundle: DownloadBundle): string[] {
   add("사건", `사건 표시: ${caseLabel(summary.identity) || "-"}${summary.identity.manualLabel ? " (담당자 직접 입력)" : where(summary.identity.sources)}`);
   add(`법무법인: ${summary.firmName ?? NOT_IN_REPLY}`, `소송 유형: ${LAWSUIT_TYPE_LABELS[summary.lawsuitType]}`, "");
 
+  if (bundle.ocrFileNames && bundle.ocrFileNames.length > 0) {
+    add(`안내: 스캔본이라 OCR(AI 글자 인식)로 읽은 파일: ${bundle.ocrFileNames.join(", ")}. 글자를 잘못 읽었을 수 있으니 날짜·금액·이름·사건번호는 원본과 대조해 주세요.`);
+  }
   if (summary.typeMismatchWarning) add(`경고: ${summary.typeMismatchWarning} (고른 소송 유형은 바꾸지 않음)`);
   const remaining = draft ? countNeedsCheck(draft, summary.disposals) : 0;
   if (remaining > 0) add(`경고: 초안에 [확인 필요] 표시가 ${remaining}곳 남아 있습니다.`);

@@ -87,6 +87,8 @@ export default function ReplyOrganizer() {
     setDownloaded(false);
   };
   const inputStale = summary !== null && summarySig !== inputSignature(input);
+  /** 정리에 쓴 자료 가운데 스캔본을 OCR로 읽은 파일들. 글자 인식 오류가 있을 수 있어 결과에 알린다 */
+  const ocrFileNames = sentSources.filter((s) => s.ocr).map((s) => s.fileName);
   const draftStale = draft !== null && draftKnownDate !== input.cancellationKnownDate;
 
   // 제척기간은 AI가 아니라 코드로, 안 날을 바꾸면 바로 다시 계산한다. "기타" 유형은 계산하지 않는다
@@ -191,7 +193,7 @@ export default function ReplyOrganizer() {
     if (draftStale) warnings.push("초안 4번(제척기간)이 지금 입력한 '취소원인을 안 날'과 다른 값으로 만들어졌어요.");
     if (inputStale) warnings.push("정리한 뒤에 입력(소송 유형·파일·이메일)이 바뀌었어요. 결과는 이전 입력 기준이에요.");
     if (warnings.length > 0 && !window.confirm(`${warnings.join("\n")}\n그래도 내려받을까요?`)) return;
-    const bundle = { createdAt: today, summary, deadlines, draft, compare };
+    const bundle = { createdAt: today, summary, deadlines, draft, compare, ocrFileNames };
     if (format === "hwpx") await downloadHwpx(bundle);
     else downloadHtml(bundle);
     setDownloaded(true);
@@ -209,6 +211,11 @@ export default function ReplyOrganizer() {
       {summary && (
         <section className={SECTION}>
           <h2 className="text-lg font-semibold">② 정리 결과</h2>
+          {ocrFileNames.length > 0 && (
+            <p role="status" className="rounded-lg bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:bg-sky-950 dark:text-sky-200">
+              ⓘ 스캔본이라 OCR(AI 글자 인식)로 읽은 파일이 있어요: {ocrFileNames.join(", ")}. 글자를 잘못 읽었을 수 있으니, 결과의 날짜·금액·이름·사건번호는 원본과 한 번 대조해 주세요.
+            </p>
+          )}
           {inputStale && (
             <p role="status" className="rounded-lg bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
               ⚠ 정리한 뒤에 입력(소송 유형·파일·이메일)이 바뀌었어요. 아래 결과는 이전 입력으로 만든 거예요. [회신 정리하기]를 다시 눌러 주세요.
