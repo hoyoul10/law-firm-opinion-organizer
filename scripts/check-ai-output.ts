@@ -8,6 +8,8 @@ import { validateDraftOutput, validateSummaryOutput } from "../lib/server/valida
 import { countNeedsCheck } from "../lib/draft";
 import { draftInput } from "../lib/server/prompts";
 import { computeDeadline, computeDeadlines } from "../lib/deadline";
+import JSZip from "jszip";
+import { buildHwpx, hwpxFileName } from "../lib/export-hwpx";
 import { buildDownloadHtml, escapeHtml } from "../lib/export-html";
 
 let failed = 0;
@@ -211,5 +213,40 @@ check("원문이 하나도 없으면 막음", !ReplyInputSchema.safeParse({ ...i
 check("안 날이 오늘 이후면 막음", !ReplyInputSchema.safeParse({ ...input, cancellationKnownDate: "2999-01-01" }).success);
 check("차수가 1·2가 아니면 막음", !ReplyInputSchema.safeParse({ ...input, sources: [{ ...input.sources[0], round: 3 }] }).success);
 
-console.log(failed ? `\n${failed}건 실패` : "\n모두 통과");
-process.exit(failed ? 1 : 0);
+async function hwpxChecks() {
+  console.log("\n■ hwpx 내려받기 (PLAN 30)");
+  const r = validateSummaryOutput(goodOutput(), input);
+  if (!r.ok) return check("hwpx 시험용 정리 결과 만들기", false);
+  const draft = {
+    debtor: "서채무 <b>굵게</b> & \u0007제어문자",
+    perBeneficiary: [{ disposalId: "d1", beneficiaryAndProperty: "남수익 — 아파트", fraudulentAct: "2025. 8. 30. 매도\n둘째 줄", claimDraft: "가액배상" }],
+    securedClaim: "보증채무",
+    deadlineReview: "여유 있음",
+    preservation: "가압류 검토",
+    firmOpinionSummary: "법무법인은 소 제기를 검토할 만하다고 봄",
+    attachmentsAndChecks: "등기부",
+  };
+  const bundle = { createdAt: "2026-10-28", summary: r.summary, deadlines: computeDeadlines(r.summary.disposals, "2026-10-01", "2026-10-28"), draft };
+  const bytes = await buildHwpx(bundle);
+  const zip = await JSZip.loadAsync(bytes);
+  const names = Object.keys(zip.files);
+  check("압축 파일 맨 앞이 mimetype", names[0] === "mimetype");
+  check("mimetype은 압축하지 않음(저장만)", bytes[8] === 0 && bytes[9] === 0);
+  check("mimetype 내용", (await zip.files["mimetype"].async("string")) === "application/hwp+zip");
+  check("필수 파일이 모두 있음", ["version.xml", "META-INF/container.xml", "Contents/content.hpf", "Contents/header.xml", "Contents/section0.xml"].every((n) => names.includes(n)));
+  const section = await zip.files["Contents/section0.xml"].async("string");
+  const paragraphs = [...section.matchAll(/<hp:t>(.*?)<\/hp:t>/g)].map((m) => m[1]);
+  check("문단 수 = 열린 문단 수 = 닫힌 문단 수", paragraphs.length === (section.match(/<hp:p /g) ?? []).length && paragraphs.length === (section.match(/<\/hp:p>/g) ?? []).length);
+  const order = ["1. 사건 개요", "2. 피보전채권 내용", "3. 사해행위 내용과 일자", "4. 제척기간 검토 결과", "5. 청구취지(안)", "6. 보전처분 필요 여부", "7. 법무법인 의견 요약", "8. 첨부서류 목록과 [확인 필요] 사항"].map((h) => paragraphs.indexOf(h));
+  check("초안 8항목이 순서대로 들어감", order.every((p, i) => p >= 0 && (i === 0 || p > order[i - 1])), order.join(","));
+  check("글 속 <, &가 XML 문자로 바뀜", section.includes("&lt;b&gt;굵게&lt;/b&gt; &amp;") && !section.includes("<b>"));
+  check("XML에 못 쓰는 제어 문자는 지움", !section.includes("\u0007"));
+  check("여러 줄 글은 문단으로 나뉨", paragraphs.includes("2025. 8. 30. 매도") && paragraphs.includes("둘째 줄"));
+  check("제척기간·점검 10항목·용어가 함께 들어감", paragraphs.some((p) => p.startsWith("가장 짧은 기한")) && paragraphs.filter((p) => /^\d+\. .* \[(있음|불명확|회신에 없음)\]/.test(p)).length === 10 && paragraphs.some((p) => p.startsWith("수익자:")));
+  check("파일 이름이 .hwpx", hwpxFileName(bundle).endsWith(".hwpx") && !hwpxFileName(bundle).includes("html"), hwpxFileName(bundle));
+}
+
+hwpxChecks().then(() => {
+  console.log(failed ? `\n${failed}건 실패` : "\n모두 통과");
+  process.exit(failed ? 1 : 0);
+});

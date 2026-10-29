@@ -16,6 +16,7 @@ import { postJson } from "@/lib/api-client";
 import { computeDeadlines } from "@/lib/deadline";
 import { countNeedsCheck } from "@/lib/draft";
 import { downloadHtml } from "@/lib/export-html";
+import { downloadHwpx } from "@/lib/export-hwpx";
 import { splitEmailBody } from "@/lib/extract/email";
 import { getToday } from "@/lib/today";
 import type { DraftRequest, ExtractedSource, LawsuitDraft, ReplyInput, ReplySummary } from "@/lib/reply-types";
@@ -107,10 +108,12 @@ export default function ReplyOrganizer() {
 
   const remaining = draft && summary ? countNeedsCheck(draft, summary.disposals) : 0;
 
-  const download = () => {
+  const download = async (format: "html" | "hwpx" = "html") => {
     if (!summary) return;
     if (remaining > 0 && !window.confirm(`초안에 [확인 필요] 표시가 ${remaining}곳 남아 있어요. 그래도 내려받을까요?`)) return;
-    downloadHtml({ createdAt: today, summary, deadlines, draft });
+    const bundle = { createdAt: today, summary, deadlines, draft };
+    if (format === "hwpx") await downloadHwpx(bundle);
+    else downloadHtml(bundle);
     setDownloaded(true);
   };
 
@@ -147,7 +150,7 @@ export default function ReplyOrganizer() {
             {isOther ? (
               <>
                 <span className="text-sm text-zinc-500">초안 양식은 사해행위취소 전용이에요. 정리 결과만 내려받을 수 있어요.</span>
-                <button type="button" onClick={download} className={PRIMARY_BUTTON}>
+                <button type="button" onClick={() => void download("html")} className={PRIMARY_BUTTON}>
                   정리 결과 HTML로 내려받기
                 </button>
               </>
@@ -185,7 +188,14 @@ export default function ReplyOrganizer() {
           />
           <div className="flex flex-wrap items-center justify-end gap-3 border-t border-black/10 pt-4 dark:border-white/10">
             {downloaded && <span className="text-sm text-emerald-700 dark:text-emerald-400">✓ 내려받았어요</span>}
-            <button type="button" onClick={download} className={PRIMARY_BUTTON}>
+            <button
+              type="button"
+              onClick={() => void download("hwpx")}
+              className="rounded-lg border border-zinc-900 px-5 py-2.5 text-sm font-semibold text-zinc-900 dark:border-white dark:text-white"
+            >
+              한글(.hwpx)로 내려받기
+            </button>
+            <button type="button" onClick={() => void download("html")} className={PRIMARY_BUTTON}>
               HTML로 내려받기
             </button>
           </div>
