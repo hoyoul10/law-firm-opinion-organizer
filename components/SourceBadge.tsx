@@ -12,7 +12,7 @@ export default function SourceBadge({ sources }: { sources: SourceLocation[] }) 
         return (
           <span
             key={label}
-            className="rounded bg-sky-50 px-1.5 py-0.5 text-xs text-sky-800 dark:bg-sky-950 dark:text-sky-200"
+            className="src"
           >
             📍 {label}
           </span>

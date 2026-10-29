@@ -17,7 +17,7 @@ export default function DraftEditor({ draft, disposals, onChange }: Props) {
     <div className="space-y-5">
       {draftSections(draft, disposals).map((section) => (
         <div key={section.no}>
-          <h3 className="mb-2 font-semibold">
+          <h3 className="sub-title">
             {section.no}. {section.title}
           </h3>
           <div className="space-y-2">
@@ -27,7 +27,7 @@ export default function DraftEditor({ draft, disposals, onChange }: Props) {
               return (
                 <div key={id}>
                   {f.label && (
-                    <label htmlFor={id} className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                    <label htmlFor={id} className="mb-1 block text-sm font-bold muted">
                       {f.label}
                     </label>
                   )}
@@ -37,10 +37,8 @@ export default function DraftEditor({ draft, disposals, onChange }: Props) {
                     value={f.text}
                     rows={Math.min(8, Math.max(2, Math.ceil(f.text.length / 70) + f.text.split("\n").length - 1))}
                     onChange={(e) => onChange(updateDraftField(draft, f.path, e.target.value))}
-                    className={`w-full rounded-lg border bg-transparent p-3 text-sm leading-relaxed ${
-                      needsCheck && section.no !== 8
-                        ? "border-amber-400 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/30"
-                        : "border-black/15 dark:border-white/20"
+                    className={`input leading-relaxed ${
+                      needsCheck && section.no !== 8 ? "!border-[var(--warn-fg)] !bg-[var(--warn-bg)]" : ""
                     }`}
                   />
                 </div>

@@ -5,10 +5,17 @@ import { deadlineMessage } from "@/lib/labels";
 import { NEEDS_CHECK, type DeadlineLevel, type DeadlineSummary, type Disposal } from "@/lib/reply-types";
 
 export const LEVEL_STYLE: Record<DeadlineLevel, string> = {
-  ok: "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
-  warning: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-  expired: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
-  "needs-check": "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  ok: "notice notice-ok",
+  warning: "notice notice-warn",
+  expired: "notice notice-danger",
+  "needs-check": "notice notice-neutral",
+};
+
+const LEVEL_CHIP: Record<DeadlineLevel, string> = {
+  ok: "chip chip-ok",
+  warning: "chip chip-warn",
+  expired: "chip chip-danger",
+  "needs-check": "chip chip-neutral",
 };
 
 interface Props {
@@ -25,47 +32,47 @@ export default function DeadlineTable({ deadlines, disposals, onSetLegalActDate,
 
   return (
     <div>
-      <h3 className="mb-2 font-semibold">제척기간</h3>
+      <h3 className="sub-title">제척기간</h3>
       {disposals.length === 0 ? (
-        <p className={`rounded-lg px-4 py-3 text-sm ${LEVEL_STYLE["needs-check"]}`}>
+        <p className={LEVEL_STYLE["needs-check"]}>
           처분행위를 찾지 못했어요 {NEEDS_CHECK}
         </p>
       ) : (
         <>
           {shortest && (
-            <p className={`mb-3 rounded-lg px-4 py-3 text-sm font-semibold ${LEVEL_STYLE[shortest.level]}`}>
+            <p className={`${LEVEL_STYLE[shortest.level]} mb-3 !text-base font-bold`}>
               {shortest.level === "expired" ? "🔴 " : shortest.level === "warning" ? "⚠ " : ""}
               가장 짧은 기한: {deadlineMessage(shortest)}
             </p>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+            <table className="tbl min-w-[640px]">
               <thead>
-                <tr className="border-b border-black/10 text-left text-xs text-zinc-500 dark:border-white/10">
-                  <th className="py-2">처분행위</th>
-                  <th className="py-2">법률행위일</th>
-                  <th className="py-2">1년 기한</th>
-                  <th className="py-2">5년 기한</th>
-                  <th className="py-2">남은 날</th>
+                <tr>
+                  <th>처분행위</th>
+                  <th>법률행위일</th>
+                  <th>1년 기한</th>
+                  <th>5년 기한</th>
+                  <th>남은 날</th>
                 </tr>
               </thead>
               <tbody>
                 {deadlines.perDisposal.map((r, i) => {
                   const d = byId.get(r.disposalId);
                   return (
-                    <tr key={r.disposalId} className="border-b border-black/5 dark:border-white/5">
-                      <td className="py-2">
+                    <tr key={r.disposalId}>
+                      <td>
                         {i + 1}. {d?.kind} · {d?.beneficiary}
-                        {d?.subsequentAcquirer && <span className="text-zinc-500"> (전득자 {d.subsequentAcquirer})</span>}
+                        {d?.subsequentAcquirer && <span className="muted"> (전득자 {d.subsequentAcquirer})</span>}
                       </td>
-                      <td className="py-2">
+                      <td>
                         {d?.legalActDate ? (
                           <>
                             {d.legalActDate}
                             {d.legalActDateManual && (
                               <>
-                                <span className="ml-1 text-xs text-zinc-500">(직접 입력)</span>
-                                <button type="button" onClick={() => onSetLegalActDate(r.disposalId, null)} className="ml-2 text-xs text-zinc-500 underline">
+                                <span className="ml-1 text-sm muted">(직접 입력)</span>
+                                <button type="button" onClick={() => onSetLegalActDate(r.disposalId, null)} className="btn-link ml-2">
                                   지우기
                                 </button>
                               </>
@@ -75,7 +82,7 @@ export default function DeadlineTable({ deadlines, disposals, onSetLegalActDate,
                           <span className="block space-y-1">
                             <span>{NEEDS_CHECK}</span>
                             {d?.legalActDateUnverified && (
-                              <span className="block text-xs text-amber-800 dark:text-amber-300">
+                              <span className="block text-sm text-[var(--warn-fg)]">
                                 AI가 읽은 날짜 {d.legalActDateUnverified}를 근거 문단에서 확인하지 못해 비웠어요. 원문을 보고 맞으면 직접 입력해 주세요.
                               </span>
                             )}
@@ -84,15 +91,15 @@ export default function DeadlineTable({ deadlines, disposals, onSetLegalActDate,
                               max={today}
                               aria-label={`${i + 1}번 처분행위 법률행위일 직접 입력`}
                               onChange={(e) => onSetLegalActDate(r.disposalId, e.target.value || null)}
-                              className="block rounded border border-black/20 px-2 py-1 text-xs dark:border-white/25 dark:bg-zinc-900"
+                              className="input input-inline !px-2 !py-1 !text-sm"
                             />
                           </span>
                         )}
                       </td>
-                      <td className="py-2">{r.oneYearEnd ?? "안 날 미입력"}</td>
-                      <td className="py-2">{r.fiveYearEnd ?? NEEDS_CHECK}</td>
-                      <td className="py-2">
-                        <span className={`whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${LEVEL_STYLE[r.level]}`}>
+                      <td>{r.oneYearEnd ?? "안 날 미입력"}</td>
+                      <td>{r.fiveYearEnd ?? NEEDS_CHECK}</td>
+                      <td>
+                        <span className={LEVEL_CHIP[r.level]}>
                           {r.daysLeft === null ? NEEDS_CHECK : `${r.daysLeft}일`}
                         </span>
                       </td>

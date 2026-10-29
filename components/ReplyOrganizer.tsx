@@ -54,9 +54,9 @@ function inputSignature(i: InputState): string {
   });
 }
 
-const SECTION = "space-y-6 rounded-xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900";
-const PRIMARY_BUTTON =
-  "rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black";
+const SECTION = "card space-y-6";
+const PRIMARY_BUTTON = "btn btn-primary";
+const SECONDARY_BUTTON = "btn btn-secondary";
 
 export default function ReplyOrganizer() {
   const [input, setInput] = useState<InputState>(EMPTY_INPUT);
@@ -239,14 +239,14 @@ export default function ReplyOrganizer() {
 
       {summary && (
         <section className={SECTION}>
-          <h2 className="text-lg font-semibold">② 정리 결과</h2>
+          <h2 className="step-title"><span className="step-no">2</span>정리 결과</h2>
           {ocrFileNames.length > 0 && (
-            <p role="status" className="rounded-lg bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:bg-sky-950 dark:text-sky-200">
+            <p role="status" className="notice notice-info">
               ⓘ 스캔본이라 OCR(AI 글자 인식)로 읽은 파일이 있어요: {ocrFileNames.join(", ")}. 글자를 잘못 읽었을 수 있으니, 결과의 날짜·금액·이름·사건번호는 원본과 한 번 대조해 주세요.
             </p>
           )}
           {inputStale && (
-            <p role="status" className="rounded-lg bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            <p role="status" className="notice notice-warn font-semibold">
               ⚠ 정리한 뒤에 입력(소송 유형·파일·이메일)이 바뀌었어요. 아래 결과는 이전 입력으로 만든 거예요. [회신 정리하기]를 다시 눌러 주세요.
             </p>
           )}
@@ -258,7 +258,7 @@ export default function ReplyOrganizer() {
             }}
           />
           {summary.typeMismatchWarning && (
-            <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <p className="notice notice-warn">
               ⚠ {summary.typeMismatchWarning} (고른 소송 유형은 바꾸지 않았어요)
             </p>
           )}
@@ -268,22 +268,22 @@ export default function ReplyOrganizer() {
           <Glossary glossary={summary.glossary} />
           <CaseInfoCompare compare={compare} busy={compareBusy} error={compareError} onCompare={(c) => void runCompare(c)} />
 
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-black/10 pt-4 dark:border-white/10">
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--line)] pt-5">
             {isOther ? (
               <>
-                <span className="text-sm text-zinc-500">초안 양식은 사해행위취소 전용이에요. 정리 결과만 내려받을 수 있어요.</span>
+                <span className="text-base muted">초안 양식은 사해행위취소 전용이에요. 정리 결과만 내려받을 수 있어요.</span>
                 <button type="button" onClick={() => void download("html")} className={PRIMARY_BUTTON}>
                   정리 결과 HTML로 내려받기
                 </button>
               </>
             ) : (
               <>
-                {needsCaseLabel && <span className="text-sm text-zinc-500">사건 표시를 먼저 정해 주세요.</span>}
+                {needsCaseLabel && <span className="text-base muted">사건 표시를 먼저 정해 주세요.</span>}
                 {/* 담당자·검토자 참고용 정리 결과(점검표·제척기간·원문 위치)만 받고 싶을 때. 초안이 있어도 받을 수 있다 */}
                 <button
                   type="button"
                   onClick={() => void download("html", true)}
-                  className="rounded-lg border border-zinc-900 px-5 py-2.5 text-sm font-semibold text-zinc-900 dark:border-white dark:text-white"
+                  className={SECONDARY_BUTTON}
                 >
                   정리 결과만 HTML로 내려받기
                 </button>
@@ -301,15 +301,15 @@ export default function ReplyOrganizer() {
       {summary && draft && (
         <section className={SECTION}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">③ 소송 의뢰 초안</h2>
+            <h2 className="step-title mb-0 flex-1"><span className="step-no">3</span>소송 의뢰 초안</h2>
             {remaining > 0 && (
-              <span className="rounded bg-amber-100 px-2 py-1 text-sm font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              <span className="chip chip-warn">
                 [확인 필요] {remaining}곳 남음 ⚠
               </span>
             )}
           </div>
           {draftStale && (
-            <p role="status" className="rounded-lg bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            <p role="status" className="notice notice-warn font-semibold">
               ⚠ &apos;취소원인을 안 날&apos;을 바꿨어요. 초안 4번(제척기간 검토)은 이전 값으로 만든 거라 위의 제척기간 표와 다를 수 있어요. [초안 다시 만들기]로 맞출 수 있어요.
             </p>
           )}
@@ -321,12 +321,12 @@ export default function ReplyOrganizer() {
               setDownloaded(false);
             }}
           />
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-black/10 pt-4 dark:border-white/10">
-            {downloaded && <span className="text-sm text-emerald-700 dark:text-emerald-400">✓ 내려받았어요</span>}
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--line)] pt-5">
+            {downloaded && <span className="text-base font-semibold text-[var(--ok-fg)]">✓ 내려받았어요</span>}
             <button
               type="button"
               onClick={() => void download("hwpx")}
-              className="rounded-lg border border-zinc-900 px-5 py-2.5 text-sm font-semibold text-zinc-900 dark:border-white dark:text-white"
+              className={SECONDARY_BUTTON}
             >
               한글(.hwpx)로 내려받기
             </button>

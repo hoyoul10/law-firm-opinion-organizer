@@ -10,17 +10,17 @@ export default function ErrorNotice({ message, onRetry, busy }: Props) {
   return (
     <div
       role="alert"
-      className="flex items-center justify-between gap-4 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+      className="notice notice-danger flex items-center justify-between gap-4 !p-4"
     >
       <span>
         {message}
-        <span className="block text-xs opacity-80">올린 파일과 입력한 내용은 그대로 있어요.</span>
+        <span className="block text-sm opacity-90">올린 파일과 입력한 내용은 그대로 있어요.</span>
       </span>
       <button
         type="button"
         onClick={onRetry}
         disabled={busy}
-        className="shrink-0 rounded-md border border-red-400 px-3 py-1 font-medium disabled:opacity-40"
+        className="btn btn-secondary btn-small shrink-0"
       >
         {busy ? "다시 하는 중…" : "다시 시도"}
       </button>

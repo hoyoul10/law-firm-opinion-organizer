@@ -8,22 +8,22 @@ export default function IssuesAndOpinion({ summary }: { summary: ReplySummary })
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="mb-2 font-semibold">법무법인 의견</h3>
-        <p className={`text-sm leading-relaxed ${firmOpinion.text === NOT_IN_REPLY ? "text-zinc-500" : ""}`}>
+        <h3 className="sub-title">법무법인 의견</h3>
+        <p className={`leading-relaxed ${firmOpinion.text === NOT_IN_REPLY ? "muted" : ""}`}>
           {firmOpinion.text}
           <SourceBadge sources={firmOpinion.sources} />
         </p>
       </div>
 
       <div>
-        <h3 className="mb-2 font-semibold">쟁점</h3>
+        <h3 className="sub-title">쟁점</h3>
         {issues.length === 0 ? (
-          <p className="text-sm text-zinc-500">{NOT_IN_REPLY}</p>
+          <p className="text-base muted">{NOT_IN_REPLY}</p>
         ) : (
-          <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed">
+          <ol className="list-decimal space-y-2 pl-5 leading-relaxed">
             {issues.map((issue, i) => (
               <li key={i}>
-                <span className="font-medium">{issue.title}</span>
+                <span className="font-bold">{issue.title}</span>
                 {" — "}
                 {issue.detail.text}
                 <SourceBadge sources={issue.detail.sources} />

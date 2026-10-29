@@ -18,7 +18,7 @@ export default function RoundSelect({ value, onChange, disabled, label }: Props)
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(Number(e.target.value) as ReplyRound)}
-      className="rounded border border-black/15 bg-transparent px-1.5 py-0.5 text-xs dark:border-white/20"
+      className="input input-inline !w-auto !px-2 !py-1 !text-sm"
     >
       <option value={1}>1차</option>
       <option value={2}>2차 보완</option>

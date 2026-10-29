@@ -16,10 +16,10 @@ import {
 import ErrorNotice from "./ErrorNotice";
 import SourceBadge from "./SourceBadge";
 
-const RESULT_STYLE: Record<CompareResult, string> = {
-  same: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
-  different: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
-  "not-comparable": "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+const RESULT_CHIP: Record<CompareResult, string> = {
+  same: "chip chip-ok",
+  different: "chip chip-danger",
+  "not-comparable": "chip chip-neutral",
 };
 
 interface Props {
@@ -49,17 +49,17 @@ export default function CaseInfoCompare({ compare, busy, error, onCompare }: Pro
   const differences = compare?.items.filter((i) => i.result === "different").length ?? 0;
 
   return (
-    <div className="space-y-3 rounded-lg border border-dashed border-black/20 p-4 dark:border-white/20">
+    <div className="space-y-3 rounded-xl border-2 border-dashed border-[var(--line)] bg-[var(--surface-soft)] p-5">
       <div>
-        <h3 className="font-semibold">사건정보 대조 (선택)</h3>
-        <p className="text-sm text-zinc-500">
+        <h3 className="sub-title">사건정보 대조 (선택)</h3>
+        <p className="text-base muted">
           필요할 때만 쓰세요. 법원 &apos;나의 사건검색&apos; 화면을 PDF로 저장해 올리고 [대조 요청]을 누르면, 회신과 다른 항목을 표시해 줘요. 파일은
           이 컴퓨터 안에서만 읽어요.
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <label className="cursor-pointer rounded border border-black/20 px-3 py-1.5 hover:bg-black/[.03] dark:border-white/25 dark:hover:bg-white/[.05]">
+      <div className="flex flex-wrap items-center gap-3 text-base">
+        <label className="btn btn-secondary btn-small">
           사건정보 PDF 고르기
           <input
             type="file"
@@ -78,7 +78,7 @@ export default function CaseInfoCompare({ compare, busy, error, onCompare }: Pro
             {file.result === null && "읽는 중…"}
             {file.result?.ok && `${file.result.pages}쪽 · ${file.result.chars.toLocaleString()}자 ✓`}
             {file.result && !file.result.ok && (
-              <span className="text-red-700 dark:text-red-300">
+              <span className="font-semibold text-[var(--danger-fg)]">
                 ⚠{" "}
                 {file.result.code === "SCAN_PDF"
                   ? "글자를 읽을 수 없는 PDF예요 (스캔한 그림일 수 있어요). 이 칸은 OCR을 지원하지 않아요. 법원 화면을 PDF로 저장한 파일(글자가 들어 있는 것)을 올려 주세요."
@@ -91,7 +91,7 @@ export default function CaseInfoCompare({ compare, busy, error, onCompare }: Pro
           type="button"
           disabled={!ready || busy}
           onClick={() => ready && onCompare(ready.source)}
-          className="ml-auto rounded-lg bg-zinc-900 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black"
+          className="btn btn-primary ml-auto"
         >
           {busy ? "대조하는 중…" : compare ? "다시 대조하기" : "대조 요청"}
         </button>
@@ -101,40 +101,36 @@ export default function CaseInfoCompare({ compare, busy, error, onCompare }: Pro
 
       {compare && (
         <div className="space-y-2">
-          <p
-            className={`rounded-lg px-4 py-2 text-sm font-semibold ${
-              differences > 0 ? RESULT_STYLE.different : RESULT_STYLE.same
-            }`}
-          >
+          <p className={`notice font-bold ${differences > 0 ? "notice-danger" : "notice-ok"}`}>
             {differences > 0 ? `⚠ 회신과 사건정보가 다른 항목이 ${differences}개 있어요` : "회신과 사건정보가 다른 항목은 없어요"} ({compare.caseInfoFileName})
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+            <table className="tbl min-w-[640px]">
               <thead>
-                <tr className="border-b border-black/10 text-left text-xs text-zinc-500 dark:border-white/10">
-                  <th className="w-40 py-2">주제</th>
-                  <th className="w-24 py-2">결과</th>
-                  <th className="py-2">회신</th>
-                  <th className="py-2">사건정보</th>
+                <tr>
+                  <th className="w-36">주제</th>
+                  <th className="w-28">결과</th>
+                  <th>회신</th>
+                  <th>사건정보</th>
                 </tr>
               </thead>
               <tbody>
                 {compare.items.map((item) => (
                   <tr
                     key={item.id}
-                    className={`border-b border-black/5 align-top dark:border-white/5 ${item.result === "different" ? "bg-red-50/60 dark:bg-red-950/30" : ""}`}
+                    
                   >
-                    <td className="py-2 pr-2 font-medium">{item.topic}</td>
-                    <td className="py-2 pr-2">
-                      <span className={`whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${RESULT_STYLE[item.result]}`}>
+                    <td className="font-bold">{item.topic}</td>
+                    <td>
+                      <span className={`whitespace-nowrap rounded px-2 py-0.5 text-sm font-medium ${RESULT_CHIP[item.result]}`}>
                         {COMPARE_RESULT_LABELS[item.result]}
                       </span>
                     </td>
-                    <td className={`py-2 pr-3 leading-relaxed ${item.replySays.text === NOT_IN_REPLY ? "text-zinc-400" : ""}`}>
+                    <td className={`${item.replySays.text === NOT_IN_REPLY ? "muted" : ""}`}>
                       {item.replySays.text}
                       <SourceBadge sources={item.replySays.sources} />
                     </td>
-                    <td className={`py-2 leading-relaxed ${item.courtSays.text === NOT_IN_COURT ? "text-zinc-400" : ""}`}>
+                    <td className={`${item.courtSays.text === NOT_IN_COURT ? "muted" : ""}`}>
                       {item.courtSays.text}
                       <SourceBadge sources={item.courtSays.sources} />
                     </td>

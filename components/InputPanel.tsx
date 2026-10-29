@@ -156,14 +156,14 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
   const blocker = submitBlocker(value);
 
   return (
-    <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-      <h2 className="mb-4 text-lg font-semibold">① 회신 올리기</h2>
+    <section className="card">
+      <h2 className="step-title"><span className="step-no">1</span>회신 올리기</h2>
 
       <fieldset className="mb-5" disabled={busy}>
-        <legend className="mb-2 text-sm font-medium">소송 유형</legend>
-        <div className="flex gap-6">
+        <legend className="label">소송 유형</legend>
+        <div className="flex flex-wrap gap-3">
           {(Object.keys(LAWSUIT_TYPE_LABELS) as LawsuitType[]).map((type) => (
-            <label key={type} className="flex items-center gap-2">
+            <label key={type} className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-soft)] px-4 py-2 font-medium has-[:checked]:border-[var(--brand)] has-[:checked]:bg-[var(--brand-tint)]">
               <input
                 type="radio"
                 name="lawsuitType"
@@ -177,9 +177,9 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
       </fieldset>
 
       <div className="mb-5">
-        <p className="mb-2 text-sm font-medium">회신 파일 (PDF·.hwpx, 여러 개 가능)</p>
+        <p className="label">회신 파일 (PDF·.hwpx, 여러 개 가능)</p>
         <label
-          className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-black/15 px-4 py-6 text-sm text-zinc-500 hover:bg-black/[.02] dark:border-white/20 dark:hover:bg-white/[.03]"
+          className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--brand)] bg-[var(--brand-tint)] px-4 py-8 text-center text-base font-semibold text-[var(--brand-strong)] hover:bg-[var(--surface-soft)]"
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault();
@@ -187,7 +187,7 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
           }}
         >
           여기로 끌어 놓거나 눌러서 파일 고르기
-          <span className="mt-1 text-xs">옛 한글 형식(.hwp)은 PDF로 바꿔서 올려 주세요. 파일은 이 컴퓨터 안에서만 읽어요.</span>
+          <span className="mt-1 text-sm font-normal muted">옛 한글 형식(.hwp)은 PDF로 바꿔서 올려 주세요. 파일은 이 컴퓨터 안에서만 읽어요.</span>
           <input
             type="file"
             accept={ACCEPT}
@@ -201,7 +201,7 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
           />
         </label>
         {notice && (
-          <p role="status" className="mt-2 rounded bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <p role="status" className="notice notice-warn mt-2">
             {notice}
           </p>
         )}
@@ -220,7 +220,7 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
 
       <div className="mb-5">
         <div className="mb-2 flex items-center gap-3">
-          <label htmlFor="emailBody" className="text-sm font-medium">
+          <label htmlFor="emailBody" className="font-bold">
             이메일 본문 (붙여넣기)
           </label>
           <RoundSelect value={value.emailRound} disabled={busy} onChange={(r) => set("emailRound", r)} label="이메일 본문 차수" />
@@ -232,13 +232,13 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
           disabled={busy}
           onChange={(e) => set("emailBody", e.target.value)}
           placeholder="법무법인에서 받은 이메일 본문을 그대로 붙여넣으세요"
-          className="w-full rounded-lg border border-black/15 bg-transparent p-3 text-sm dark:border-white/20"
+          className="input"
         />
       </div>
 
       <div className="mb-6">
-        <label htmlFor="knownDate" className="mb-2 block text-sm font-medium">
-          취소원인을 안 날 <span className="font-normal text-zinc-500">(모르면 비워 두세요)</span>
+        <label htmlFor="knownDate" className="label">
+          취소원인을 안 날 <span className="font-normal muted">(모르면 비워 두세요)</span>
         </label>
         <input
           id="knownDate"
@@ -258,22 +258,22 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
             set("cancellationKnownDate", v);
           }}
           aria-invalid={dateError !== null}
-          className="rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm dark:border-white/20"
+          className="input input-inline"
         />
         {dateError && (
-          <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-300">
+          <p role="alert" className="mt-1 text-sm text-[var(--danger-fg)] font-semibold">
             {dateError}
           </p>
         )}
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-3">
-        {blocker && !busy && <span className="text-sm text-zinc-500">{blocker}</span>}
+        {blocker && !busy && <span className="text-base muted">{blocker}</span>}
         <button
           type="button"
           disabled={busy || locked || blocker !== null}
           onClick={onSubmit}
-          className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black"
+          className="btn btn-primary"
         >
           {busy ? "정리하는 중… (30초 안팎)" : "회신 정리하기"}
         </button>

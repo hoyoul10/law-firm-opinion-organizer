@@ -1,26 +1,324 @@
 @import "tailwindcss";
 
+/*
+ * 화면 디자인 (한국자산관리공사 업무 도구 느낌: 신뢰감 있는 파랑 계열, 넉넉한 글자 크기, 또렷한 구분선)
+ * 색은 모두 아래 이름표(변수)로만 쓴다. 어두운 화면 설정이면 아래쪽 값으로 바뀐다.
+ */
 :root {
-  --background: #f6f7f9;
-  --foreground: #171717;
+  --background: #f1f5fa;
+  --foreground: #1b2430;
+  --surface: #ffffff;
+  --surface-soft: #f6f9fc;
+  --line: #d3dce7;
+  --muted: #566274;
+
+  --brand: #005bac; /* 주 색: 버튼, 제목 강조 */
+  --brand-strong: #003f7d;
+  --brand-navy: #0a2f5c; /* 머리띠 */
+  --brand-tint: #e6f0fa;
+  --accent: #00857c; /* 보조 색: 완료·통과 */
+
+  --ok-bg: #e4f4ec;
+  --ok-fg: #0b6b40;
+  --warn-bg: #fff3d1;
+  --warn-fg: #7a4f00;
+  --danger-bg: #fde8e6;
+  --danger-fg: #a4221a;
+  --info-bg: #e6f0fa;
+  --info-fg: #0b4a86;
+  --neutral-bg: #e9edf2;
+  --neutral-fg: #3b4757;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   /* 한글이 잘 보이는 시스템 글꼴을 먼저 쓴다 */
-  --font-sans: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --font-sans: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0d1622;
+    --foreground: #e6edf5;
+    --surface: #152131;
+    --surface-soft: #1a283a;
+    --line: #2b3b4f;
+    --muted: #9aaabd;
+
+    --brand: #4ea1f0;
+    --brand-strong: #7bbcf5;
+    --brand-navy: #0a1f38;
+    --brand-tint: #17304d;
+    --accent: #3cc0b5;
+
+    --ok-bg: #123a29;
+    --ok-fg: #7fe0ae;
+    --warn-bg: #43330c;
+    --warn-fg: #f6d27a;
+    --danger-bg: #4a1c19;
+    --danger-fg: #ffb4ad;
+    --info-bg: #17304d;
+    --info-fg: #a8d0f7;
+    --neutral-bg: #26354a;
+    --neutral-fg: #c5d1df;
   }
+}
+
+html {
+  font-size: 17px; /* 기본 글자를 키워 읽기 편하게 */
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  line-height: 1.7;
+  word-break: keep-all; /* 한글을 단어 단위로 줄바꿈 */
+  overflow-wrap: anywhere;
+}
+
+/* 키보드로 이동할 때 어디에 있는지 보이게 */
+:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* ───── 구성 요소 ───── */
+
+/* 단계 카드 (① ② ③) */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgb(10 47 92 / 0.06), 0 6px 18px rgb(10 47 92 / 0.05);
+  padding: 1.5rem;
+}
+
+.step-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 2px solid var(--brand);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--brand-strong);
+}
+.step-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  flex: none;
+}
+
+/* 결과 안의 작은 제목 */
+.sub-title {
+  margin-bottom: 0.6rem;
+  padding-left: 0.65rem;
+  border-left: 4px solid var(--brand);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* 버튼 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 10px;
+  padding: 0.7rem 1.3rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.btn-primary {
+  background: var(--brand);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+.btn-secondary {
+  background: var(--surface);
+  color: var(--brand-strong);
+  border-color: var(--brand);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--brand-tint);
+}
+.btn-small {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.9rem;
+  border-radius: 8px;
+}
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.btn-link:hover:not(:disabled) {
+  color: var(--danger-fg);
+}
+
+/* 입력 칸 */
+.input {
+  width: 100%;
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  font-size: 1rem;
+}
+.input:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+.input:disabled {
+  background: var(--surface-soft);
+}
+.input-inline {
+  width: auto;
+}
+.label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+}
+
+/* 알림 상자 */
+.notice {
+  border-radius: 10px;
+  border: 1px solid transparent;
+  padding: 0.8rem 1rem;
+  font-size: 0.95rem;
+}
+.notice-info {
+  background: var(--info-bg);
+  color: var(--info-fg);
+  border-color: color-mix(in srgb, var(--info-fg) 25%, transparent);
+}
+.notice-warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: color-mix(in srgb, var(--warn-fg) 30%, transparent);
+}
+.notice-danger {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: color-mix(in srgb, var(--danger-fg) 30%, transparent);
+}
+.notice-neutral {
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+  border-color: var(--line);
+}
+.notice-ok {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border-color: color-mix(in srgb, var(--ok-fg) 25%, transparent);
+}
+
+/* 상태 표시 (표 안의 작은 알약) */
+.chip {
+  display: inline-block;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 0.12rem 0.7rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+.chip-ok {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.chip-warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.chip-danger {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+}
+.chip-neutral {
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+}
+.chip-info {
+  background: var(--info-bg);
+  color: var(--info-fg);
+}
+
+/* 표 */
+.tbl {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.97rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.tbl th {
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  text-align: left;
+  font-weight: 700;
+  padding: 0.65rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+}
+.tbl td {
+  padding: 0.7rem 0.8rem;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+.tbl tr:last-child td {
+  border-bottom: none;
+}
+.tbl tbody tr:nth-child(even) td {
+  background: var(--surface-soft);
+}
+
+/* 원문 위치 표시 */
+.src {
+  display: inline-block;
+  margin: 0.1rem 0.25rem 0.1rem 0;
+  border-radius: 6px;
+  background: var(--info-bg);
+  color: var(--info-fg);
+  padding: 0.05rem 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* 머리띠 */
+.site-header {
+  background: linear-gradient(90deg, var(--brand-navy), var(--brand-strong));
+  color: #fff;
+  border-bottom: 4px solid var(--accent);
 }

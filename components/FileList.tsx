@@ -30,32 +30,32 @@ interface Props {
 export default function FileList({ files, disabled, onRoundChange, onRemove, onOcr, onCancelOcr }: Props) {
   if (files.length === 0) return null;
   return (
-    <ul className="mt-3 space-y-1.5 text-sm">
+    <ul className="mt-3 space-y-2 text-base">
       {files.map((f) => {
         const r = f.result;
         const canOcr = r !== null && !r.ok && (r.code === "SCAN_PDF" || r.code === "OCR_FAILED") && !f.ocr;
         return (
           <li
             key={f.id}
-            className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded px-3 py-2 ${
-              r && !r.ok && !f.ocr ? "bg-red-50 dark:bg-red-950" : "bg-black/[.03] dark:bg-white/[.05]"
+            className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-4 py-3 ${
+              r && !r.ok && !f.ocr ? "border-[var(--danger-fg)] bg-[var(--danger-bg)]" : "border-[var(--line)] bg-[var(--surface-soft)]"
             }`}
           >
             <span className="min-w-0 flex-1 truncate font-medium">{f.displayName}</span>
             <RoundSelect value={f.round} disabled={disabled} onChange={(round) => onRoundChange(f.id, round)} label={`${f.displayName} 차수`} />
-            <span className="text-xs text-zinc-600 dark:text-zinc-400">
+            <span className="text-sm muted">
               {r === null && "읽는 중…"}
               {f.ocr && `OCR로 읽는 중… ${f.ocr.total > 0 ? `${f.ocr.done}/${f.ocr.total}쪽` : "쪽 수를 세는 중"}`}
               {r?.ok && !f.ocr && (
                 <>
                   {`${r.pages ? `${r.pages}쪽 · ` : ""}${r.chars.toLocaleString()}자 ✓`}
                   {r.source.ocr && (
-                    <span className="ml-1 text-amber-700 dark:text-amber-300">(OCR로 읽음 — 글자 인식 오류가 있을 수 있어요)</span>
+                    <span className="ml-1 text-[var(--warn-fg)] font-semibold">(OCR로 읽음 — 글자 인식 오류가 있을 수 있어요)</span>
                   )}
                 </>
               )}
               {r && !r.ok && !f.ocr && (
-                <span className="text-red-700 dark:text-red-300">
+                <span className="font-semibold text-[var(--danger-fg)]">
                   ⚠ {EXTRACT_ERROR_MESSAGES[r.code]}
                   {r.message ? ` ${r.message}` : ""}
                 </span>
@@ -66,26 +66,26 @@ export default function FileList({ files, disabled, onRoundChange, onRemove, onO
                 type="button"
                 disabled={disabled}
                 onClick={() => onOcr(f.id)}
-                className="rounded border border-zinc-900 px-2 py-0.5 text-xs font-semibold text-zinc-900 disabled:opacity-40 dark:border-white dark:text-white"
+                className="btn btn-secondary btn-small"
               >
                 {r.code === "OCR_FAILED" ? "OCR 다시 하기" : "OCR로 읽기"}
               </button>
             )}
             {f.ocr && (
-              <button type="button" onClick={() => onCancelOcr(f.id)} className="rounded border border-black/30 px-2 py-0.5 text-xs dark:border-white/30">
+              <button type="button" onClick={() => onCancelOcr(f.id)} className="btn btn-secondary btn-small">
                 취소
               </button>
             )}
             <button
               type="button"
               disabled={disabled}
-              className="text-xs text-zinc-500 hover:text-red-600 disabled:opacity-40"
+              className="btn-link"
               onClick={() => onRemove(f.id)}
             >
               빼기
             </button>
             {canOcr && (
-              <p className="basis-full text-xs text-zinc-500">
+              <p className="basis-full text-sm muted">
                 OCR은 스캔한 쪽 그림을 AI 서버로 보내 글자를 읽어요 (저장하지 않아요). 쪽당 몇 초가 걸리고 비용이 들어요. 읽은 뒤 날짜·금액은 원본과 한 번 대조해 주세요.
               </p>
             )}
