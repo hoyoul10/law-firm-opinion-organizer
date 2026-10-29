@@ -5,6 +5,7 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { NOT_IN_REPLY, type ExtractedSource, type ReplyInput } from "../lib/reply-types";
 import { ReplyInputSchema, SummaryOutputSchema, type CompareOutput, type SummaryOutput } from "../lib/server/schemas";
 import { validateCompareOutput, validateDraftOutput, validateSummaryOutput } from "../lib/server/validate";
+import { errorFromParse } from "../lib/server/respond";
 import { countNeedsCheck } from "../lib/draft";
 import { draftInput } from "../lib/server/prompts";
 import { computeDeadline, computeDeadlines } from "../lib/deadline";
@@ -202,6 +203,18 @@ if (good.ok) {
   validateDraftOutput({ ...baseDraft, securedClaim: "1천만 ".repeat(999) }, summary, null, input.sources);
   check("금액 검사가 긴 악성 입력에서도 빨리 끝남 (보안 SEC-002)", Date.now() - t0 < 1_000, `${Date.now() - t0}ms`);
   check("너무 긴 칸은 막음", !validateDraftOutput({ ...baseDraft, securedClaim: "가".repeat(4_001) }, summary, null, input.sources).ok);
+  const wrongDebtor = validateDraftOutput({ ...baseDraft, debtor: "엉뚱한이름" }, summary, null, input.sources);
+  check("초안의 채무자 이름이 정리 결과와 다르면 [확인 필요]", wrongDebtor.ok && wrongDebtor.draft.debtor.includes("(채무자 이름이 정리 결과와 다름)"));
+  const wrongBeneficiary = validateDraftOutput(
+    { ...baseDraft, perBeneficiary: [{ ...baseDraft.perBeneficiary[0], beneficiaryAndProperty: "다른사람 — 아파트" }] },
+    summary,
+    null,
+    input.sources,
+  );
+  check("초안의 수익자 이름이 정리 결과와 다르면 [확인 필요]", wrongBeneficiary.ok && wrongBeneficiary.draft.perBeneficiary[0].beneficiaryAndProperty.includes("(수익자 이름이 정리 결과와 다름)"));
+  check("이름이 맞으면 [확인 필요]를 붙이지 않음", okDraft.ok && !okDraft.draft.debtor.includes("확인 필요") && !okDraft.draft.perBeneficiary[0].beneficiaryAndProperty.includes("확인 필요"));
+  const honorific = validateDraftOutput(baseDraft, { ...summary, identity: { ...summary.identity, debtorName: "서채무 씨" } }, null, input.sources);
+  check("'서채무 씨'와 '서채무'는 같은 이름으로 봄", honorific.ok && !honorific.draft.debtor.includes("확인 필요"));
   check("HTML 특수문자 처리", escapeHtml(`<script>alert("x")</script>&`) === "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;&amp;");
   const html = buildDownloadHtml({ createdAt: "2026-10-28", summary, deadlines: null, draft: { ...baseDraft, debtor: "<img src=x onerror=alert(1)>" } });
   check("내려받은 HTML에 스크립트·태그가 실행되지 않음", !/<script|<img/i.test(html) && html.includes("&lt;img"));
@@ -257,6 +270,13 @@ console.log("\n■ 사건정보 대조 검사 (PLAN 29)");
   check("원문 위치 없이 내용만 있으면 막음", !run((o) => { o.items[4].courtSays.sources = []; }).ok);
   const unknownDate = run((o) => { o.items[0].courtSays.text = "피고 남수익 (2030. 1. 1. 접수)"; });
   check("사건정보에 없는 날짜에는 [확인 필요]", unknownDate.ok && unknownDate.compare.items[0].courtSays.text.includes("[확인 필요](원문에 없는 날짜)"));
+  const unknownCase = run((o) => { o.items[0].courtSays.text = "피고 남수익 (2026가합99999)"; });
+  check("사건정보에 없는 사건번호에는 [확인 필요]", unknownCase.ok && unknownCase.compare.items[0].courtSays.text.includes("(원문에 없는 사건번호)"));
+  const courtWithNo = { ...court, segments: [...court.segments, { page: 1, paragraph: 4, text: "사건번호 2026가합12345" }] };
+  const o2 = base();
+  o2.items[0].courtSays = { text: "사건번호 2026가합12345, 피고 남수익", sources: [ct(4)] };
+  const knownCase = validateCompareOutput(o2, input.sources, courtWithNo);
+  check("원문에 있는 사건번호와 '2026년' 같은 날짜 표기에는 붙이지 않음", knownCase.ok && !knownCase.compare.items[0].courtSays.text.includes("확인 필요"));
 }
 
 async function hwpxChecks() {
@@ -290,6 +310,19 @@ async function hwpxChecks() {
   check("여러 줄 글은 문단으로 나뉨", paragraphs.includes("2025. 8. 30. 매도") && paragraphs.includes("둘째 줄"));
   check("제척기간·점검 10항목·용어가 함께 들어감", paragraphs.some((p) => p.startsWith("가장 짧은 기한")) && paragraphs.filter((p) => /^\d+\. .* \[(있음|불명확|회신에 없음)\]/.test(p)).length === 10 && paragraphs.some((p) => p.startsWith("수익자:")));
   check("파일 이름이 .hwpx", hwpxFileName(bundle).endsWith(".hwpx") && !hwpxFileName(bundle).includes("html"), hwpxFileName(bundle));
+
+  console.log("\n■ 요청 거절 이유 안내");
+  const asCode = async (res: Response | null) => (res ? { status: res.status, code: ((await res.json()) as { error: { code: string } }).error.code } : null);
+  const tooLong = ReplyInputSchema.safeParse({ ...input, sources: [{ ...input.sources[0], segments: [{ page: 1, paragraph: 1, text: "가".repeat(20_001) }] }] });
+  const tooLongResult = await asCode(tooLong.success ? null : errorFromParse(tooLong.error));
+  check("한 문단이 2만 자를 넘으면 '너무 길다'(413)로 안내", tooLongResult?.code === "PAYLOAD_TOO_LARGE" && tooLongResult.status === 413, JSON.stringify(tooLongResult));
+  const tooMany = ReplyInputSchema.safeParse({ ...input, sources: Array.from({ length: 31 }, () => input.sources[0]) });
+  check("자료가 30개를 넘으면 '너무 길다'로 안내", (await asCode(tooMany.success ? null : errorFromParse(tooMany.error)))?.code === "PAYLOAD_TOO_LARGE");
+  const future = ReplyInputSchema.safeParse({ ...input, cancellationKnownDate: "2999-01-01" });
+  const futureResult = await asCode(future.success ? null : errorFromParse(future.error));
+  check("안 날이 오늘 이후면 날짜 안내(INVALID_DATE)", futureResult?.code === "INVALID_DATE" && futureResult.status === 400, JSON.stringify(futureResult));
+  const empty = ReplyInputSchema.safeParse({ ...input, sources: [] });
+  check("그 밖의 잘못된 입력은 '입력을 확인해 주세요'", (await asCode(empty.success ? null : errorFromParse(empty.error)))?.code === "INVALID_INPUT");
 }
 
 hwpxChecks().then(() => {

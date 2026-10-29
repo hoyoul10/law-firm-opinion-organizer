@@ -3,7 +3,7 @@
 
 import { AiCallError, requestStructured } from "@/lib/server/openai";
 import { summarizeInstructions, tagSources } from "@/lib/server/prompts";
-import { errorResponse, logFailure, rejectForeignRequest } from "@/lib/server/respond";
+import { errorFromParse, errorResponse, logFailure, rejectForeignRequest } from "@/lib/server/respond";
 import { ReplyInputSchema, SummaryOutputSchema } from "@/lib/server/schemas";
 import { validateSummaryOutput } from "@/lib/server/validate";
 import type { ReplyInput } from "@/lib/reply-types";
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   if (rejected) return rejected;
 
   const parsed = ReplyInputSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return errorResponse("INVALID_INPUT");
+  if (!parsed.success) return errorFromParse(parsed.error);
 
   const input: ReplyInput = parsed.data;
   const tagged = tagSources(input.sources);

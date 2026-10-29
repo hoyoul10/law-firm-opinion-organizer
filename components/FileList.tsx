@@ -9,6 +9,8 @@ import RoundSelect from "./RoundSelect";
 export interface UploadedFile {
   id: string;
   file: File;
+  /** 화면과 원문 위치에 쓰는 이름. 같은 이름 파일이 여러 개면 "이름 (2).pdf"처럼 구분한다 */
+  displayName: string;
   round: ReplyRound;
   /** 아직 읽는 중이면 null */
   result: ExtractResult | null;
@@ -34,8 +36,8 @@ export default function FileList({ files, disabled, onRoundChange, onRemove }: P
               r && !r.ok ? "bg-red-50 dark:bg-red-950" : "bg-black/[.03] dark:bg-white/[.05]"
             }`}
           >
-            <span className="min-w-0 flex-1 truncate font-medium">{f.file.name}</span>
-            <RoundSelect value={f.round} disabled={disabled} onChange={(round) => onRoundChange(f.id, round)} label={`${f.file.name} 차수`} />
+            <span className="min-w-0 flex-1 truncate font-medium">{f.displayName}</span>
+            <RoundSelect value={f.round} disabled={disabled} onChange={(round) => onRoundChange(f.id, round)} label={`${f.displayName} 차수`} />
             <span className="text-xs text-zinc-600 dark:text-zinc-400">
               {r === null && "읽는 중…"}
               {r?.ok && `${r.pages ? `${r.pages}쪽 · ` : ""}${r.chars.toLocaleString()}자 ✓`}

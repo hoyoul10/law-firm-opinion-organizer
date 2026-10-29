@@ -3,8 +3,9 @@
 // ① 회신 올리기: 소송 유형, 파일(차수·추출 상태), 이메일 본문(차수), 취소원인을 안 날
 // Design Ref: §3.1 — 스캔 PDF·읽지 못한 파일이 하나라도 있으면 정리하기를 잠근다 (PRD: 안내하고 멈춤)
 
-import type { Dispatch, SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { extractFile } from "@/lib/extract";
+import type { ExtractResult } from "@/lib/extract/types";
 import { LAWSUIT_TYPE_LABELS, type LawsuitType, type ReplyRound } from "@/lib/reply-types";
 import FileList, { type UploadedFile } from "./FileList";
 import RoundSelect from "./RoundSelect";
@@ -40,29 +41,79 @@ interface Props {
   setValue: Dispatch<SetStateAction<InputState>>;
   onSubmit: () => void;
   busy: boolean;
+  /** 사건정보 대조 중처럼, 입력은 바꿀 수 있지만 새로 정리는 못 하게 막을 때 */
+  locked?: boolean;
   /** 한국 시간 오늘. 취소원인을 안 날은 이 날 이후를 고를 수 없다 */
   today: string;
 }
 
 let nextId = 0;
 
-export default function InputPanel({ value, setValue, onSubmit, busy, today }: Props) {
-  const set = <K extends keyof InputState>(key: K, v: InputState[K]) => setValue((prev) => ({ ...prev, [key]: v }));
+/** 읽는 사이에 담당자가 차수를 바꿨을 수 있으니, 읽기 결과에는 지금 고른 차수를 넣는다 */
+function withRound(result: ExtractResult, round: ReplyRound): ExtractResult {
+  return result.ok ? { ...result, source: { ...result.source, round } } : result;
+}
 
-  const updateFile = (id: string, patch: Partial<UploadedFile>) =>
-    setValue((prev) => ({ ...prev, files: prev.files.map((f) => (f.id === id ? { ...f, ...patch } : f)) }));
+/** "회신.pdf" → "회신 (2).pdf", 이미 있으면 (3), (4)… */
+function uniqueName(name: string, used: Set<string>): string {
+  const dot = name.lastIndexOf(".");
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
+  for (let n = 2; ; n++) {
+    const candidate = `${base} (${n})${ext}`;
+    if (!used.has(candidate)) return candidate;
+  }
+}
+
+export default function InputPanel({ value, setValue, onSubmit, busy, locked = false, today }: Props) {
+  const set = <K extends keyof InputState>(key: K, v: InputState[K]) => setValue((prev) => ({ ...prev, [key]: v }));
+  const [notice, setNotice] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string | null>(null);
+  const started = useRef(new Set<string>());
+  const filesRef = useRef(value.files);
+
+  useEffect(() => {
+    filesRef.current = value.files;
+  }, [value.files]);
+
+  // 아직 읽기를 시작하지 않은 파일은 여기서 한 번만 읽는다
+  useEffect(() => {
+    for (const f of value.files) {
+      if (f.result !== null || started.current.has(f.id)) continue;
+      started.current.add(f.id);
+      void extractFile(f.file, f.round, f.displayName).then((result) =>
+        setValue((prev) => ({
+          ...prev,
+          files: prev.files.map((x) => (x.id === f.id ? { ...x, result: withRound(result, x.round) } : x)),
+        })),
+      );
+    }
+  }, [value.files, setValue]);
 
   const addFiles = (list: FileList | null) => {
     if (!list) return;
-    const known = new Set(value.files.map((f) => f.file.name));
-    const added: UploadedFile[] = Array.from(list)
-      .filter((file) => !known.has(file.name))
-      .map((file) => ({ id: `f${nextId++}`, file, round: 1, result: null }));
-    if (added.length === 0) return;
-    setValue((prev) => ({ ...prev, files: [...prev.files, ...added] }));
-    for (const f of added) {
-      void extractFile(f.file, f.round).then((result) => updateFile(f.id, { result }));
+    const current = [...filesRef.current];
+    const added: UploadedFile[] = [];
+    const skipped: string[] = [];
+    const renamed: string[] = [];
+    for (const file of Array.from(list)) {
+      const all = [...current, ...added];
+      // 이름·크기·수정 시각이 모두 같으면 같은 파일이므로 다시 올리지 않는다
+      if (all.some((f) => f.file.name === file.name && f.file.size === file.size && f.file.lastModified === file.lastModified)) {
+        skipped.push(file.name);
+        continue;
+      }
+      // 이름만 같고 내용이 다른 파일(예: 1차·2차 회신)은 "이름 (2)"처럼 구분해서 둘 다 올린다
+      const used = new Set(all.map((f) => f.displayName));
+      const displayName = used.has(file.name) ? uniqueName(file.name, used) : file.name;
+      if (displayName !== file.name) renamed.push(`${file.name} → ${displayName}`);
+      added.push({ id: `f${nextId++}`, file, displayName, round: 1, result: null });
     }
+    const parts: string[] = [];
+    if (skipped.length) parts.push(`이미 올린 파일이에요: ${skipped.join(", ")}`);
+    if (renamed.length) parts.push(`이름이 같은 파일은 구분해서 올렸어요: ${renamed.join(", ")}`);
+    setNotice(parts.length ? parts.join(" / ") : null);
+    if (added.length > 0) setValue((prev) => ({ ...prev, files: [...prev.files, ...added] }));
   };
 
   const changeRound = (id: string, round: ReplyRound) =>
@@ -120,6 +171,11 @@ export default function InputPanel({ value, setValue, onSubmit, busy, today }: P
             }}
           />
         </label>
+        {notice && (
+          <p role="status" className="mt-2 rounded bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            {notice}
+          </p>
+        )}
         <FileList
           files={value.files}
           disabled={busy}
@@ -158,18 +214,30 @@ export default function InputPanel({ value, setValue, onSubmit, busy, today }: P
           disabled={busy}
           onChange={(e) => {
             const v = e.target.value;
-            // 오늘 이후 날짜는 받지 않는다 (PRD 예외: 날짜 입력 오류)
-            set("cancellationKnownDate", today && v > today ? today : v);
+            // 오늘 이후 날짜는 받지 않는다 (PRD 예외: 날짜 입력 오류). 조용히 다른 날짜로 바꾸지 않고 비운 뒤 이유를 알린다
+            if (today && v > today) {
+              setDateError("오늘 이후 날짜는 고를 수 없어요. 날짜를 다시 골라 주세요.");
+              set("cancellationKnownDate", "");
+              return;
+            }
+            setDateError(null);
+            set("cancellationKnownDate", v);
           }}
+          aria-invalid={dateError !== null}
           className="rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm dark:border-white/20"
         />
+        {dateError && (
+          <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-300">
+            {dateError}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         {blocker && !busy && <span className="text-sm text-zinc-500">{blocker}</span>}
         <button
           type="button"
-          disabled={busy || blocker !== null}
+          disabled={busy || locked || blocker !== null}
           onClick={onSubmit}
           className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black"
         >

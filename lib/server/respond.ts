@@ -2,10 +2,12 @@
 // 회신 내용은 로그에 남기지 않는다. 오류 코드와 글자 수만 남긴다 (Design Ref: §7)
 
 import "server-only";
+import type { ZodError } from "zod";
 import { API_ERROR_MESSAGES, type ApiErrorBody, type ApiErrorCode } from "../api-errors";
 
 const STATUS: Record<ApiErrorCode, number> = {
   INVALID_INPUT: 400,
+  INVALID_DATE: 400,
   PAYLOAD_TOO_LARGE: 413,
   AI_TIMEOUT: 504,
   AI_FAILED: 502,
@@ -43,4 +45,14 @@ export function rejectForeignRequest(request: Request): Response | null {
     if (!host || new URL(origin).host !== host) return errorResponse("INVALID_INPUT");
   }
   return null;
+}
+
+/**
+ * 요청 모양 검사에 실패한 이유를 화면에 알맞게 알린다.
+ * 안 날(날짜) 문제는 날짜 안내로, 글자·문단·자료가 너무 많으면 "너무 길다"로, 그 밖에는 "입력을 확인해 주세요"로.
+ */
+export function errorFromParse(error: ZodError): Response {
+  if (error.issues.some((i) => i.path.join(".").endsWith("cancellationKnownDate"))) return errorResponse("INVALID_DATE");
+  if (error.issues.some((i) => i.code === "too_big")) return errorResponse("PAYLOAD_TOO_LARGE");
+  return errorResponse("INVALID_INPUT");
 }

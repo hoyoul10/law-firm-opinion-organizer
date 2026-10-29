@@ -18,7 +18,7 @@ function sectionOrder(name: string): number {
   return Number(/section(\d+)\.xml$/i.exec(name)?.[1] ?? 0);
 }
 
-export async function extractHwpx(file: File, round: ReplyRound): Promise<ExtractResult> {
+export async function extractHwpx(file: File, round: ReplyRound, fileName: string = file.name): Promise<ExtractResult> {
   try {
     const zip = await JSZip.loadAsync(await file.arrayBuffer());
     const sectionNames = Object.keys(zip.files)
@@ -45,7 +45,7 @@ export async function extractHwpx(file: File, round: ReplyRound): Promise<Extrac
     const segments: TextSegment[] = texts.map((text, i) => ({ paragraph: i + 1, text }));
     const chars = texts.reduce((sum, t) => sum + t.length, 0);
     if (chars === 0) return { ok: false, code: "EXTRACT_FAILED" };
-    return { ok: true, source: { fileName: file.name, kind: "hwpx", round, segments }, chars };
+    return { ok: true, source: { fileName, kind: "hwpx", round, segments }, chars };
   } catch {
     return { ok: false, code: "EXTRACT_FAILED" };
   }

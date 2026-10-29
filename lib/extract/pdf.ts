@@ -20,10 +20,16 @@ let pdfjsPromise: Promise<PdfJs> | null = null;
 
 function loadPdfJs(): Promise<PdfJs> {
   if (!pdfjsPromise) {
-    pdfjsPromise = import("pdfjs-dist").then((pdfjs) => {
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-      return pdfjs;
-    });
+    pdfjsPromise = import("pdfjs-dist")
+      .then((pdfjs) => {
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+        return pdfjs;
+      })
+      .catch((err) => {
+        // 한 번 실패한 로딩 결과를 저장해 두면 이후 모든 PDF가 실패하므로, 다음에 다시 시도하게 비운다
+        pdfjsPromise = null;
+        throw err;
+      });
   }
   return pdfjsPromise;
 }
@@ -93,7 +99,7 @@ function toParagraphs(lines: Line[]): string[] {
     .filter((p) => p && !PAGE_NUMBER.test(p));
 }
 
-export async function extractPdf(file: File, round: ReplyRound): Promise<ExtractResult> {
+export async function extractPdf(file: File, round: ReplyRound, fileName: string = file.name): Promise<ExtractResult> {
   let task;
   let doc;
   try {
@@ -116,7 +122,7 @@ export async function extractPdf(file: File, round: ReplyRound): Promise<Extract
     // 글자가 거의 없으면 스캔한 이미지 PDF로 본다
     if (chars < 20) return { ok: false, code: "SCAN_PDF", pages: doc.numPages };
 
-    const source: ExtractedSource = { fileName: file.name, kind: "pdf", round, segments };
+    const source: ExtractedSource = { fileName, kind: "pdf", round, segments };
     return { ok: true, source, pages: doc.numPages, chars };
   } catch {
     return { ok: false, code: "EXTRACT_FAILED" };

@@ -3,7 +3,7 @@
 
 import { AiCallError, requestStructured } from "@/lib/server/openai";
 import { draftInput, draftInstructions } from "@/lib/server/prompts";
-import { errorResponse, logFailure, rejectForeignRequest } from "@/lib/server/respond";
+import { errorFromParse, errorResponse, logFailure, rejectForeignRequest } from "@/lib/server/respond";
 import { DraftOutputSchema, DraftRequestSchema } from "@/lib/server/schemas";
 import { validateDraftOutput } from "@/lib/server/validate";
 import type { DraftRequest } from "@/lib/reply-types";
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   if (rejected) return rejected;
 
   const parsed = DraftRequestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return errorResponse("INVALID_INPUT");
+  if (!parsed.success) return errorFromParse(parsed.error);
 
   const { summary, deadlines, sources } = parsed.data as DraftRequest;
   const input = draftInput(summary, deadlines, sources);

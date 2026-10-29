@@ -3,7 +3,7 @@
 
 import { AiCallError, requestStructured } from "@/lib/server/openai";
 import { compareInput, compareInstructions } from "@/lib/server/prompts";
-import { errorResponse, logFailure, rejectForeignRequest } from "@/lib/server/respond";
+import { errorFromParse, errorResponse, logFailure, rejectForeignRequest } from "@/lib/server/respond";
 import { CompareOutputSchema, CompareRequestSchema } from "@/lib/server/schemas";
 import { validateCompareOutput } from "@/lib/server/validate";
 import type { CompareRequest } from "@/lib/reply-types";
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   if (rejected) return rejected;
 
   const parsed = CompareRequestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return errorResponse("INVALID_INPUT");
+  if (!parsed.success) return errorFromParse(parsed.error);
 
   const { summary, sources, caseInfo } = parsed.data as CompareRequest;
   const input = compareInput(summary, sources, caseInfo);

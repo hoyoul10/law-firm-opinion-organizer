@@ -225,6 +225,9 @@ function normalizeDate(y: string, m: string, d: string): string {
   return `${Number(y)}-${Number(m)}-${Number(d)}`;
 }
 
+/** 사건번호 모양: 연도 + 한글 사건부호 + 번호 (2026가합12345, 2026카처5678, 2026-사해-0101). 2026년·2026. 같은 날짜 표기와 겹치지 않게 연도 뒤에 "년·월·일"은 제외 */
+const CASE_NUMBER_PATTERN = /\d{4}-?(?![년월일])[가-힣]{1,4}-?\d{1,8}/g;
+
 function squeeze(text: string): string {
   return text.replace(/\s+/g, "");
 }
@@ -280,13 +283,25 @@ export function validateDraftOutput(
     problems.push(`수익자별 칸: 처분행위(${expectedIds.join(",")})마다 하나씩이어야 함 (받은 것: ${output.perBeneficiary.map((p) => p.disposalId).join(",") || "없음"})`);
   }
 
+  // 당사자 이름은 정리 결과(원문에서 서버가 확인한 이름)와 같아야 한다. 다르면 [확인 필요]를 붙인다
+  const plainName = (name: string | null | undefined) => (name ?? "").replace(/\s*씨$/, "").trim();
+  const expectName = (text: string, name: string | null | undefined, note: string) => {
+    const n = plainName(name);
+    return n && !text.includes(n) ? `${text} ${NEEDS_CHECK}(${note})` : text;
+  };
+
   const draft: LawsuitDraft = {
-    debtor: field("1. 채무자", output.debtor),
+    debtor: expectName(field("1. 채무자", output.debtor), summary.identity.debtorName, "채무자 이름이 정리 결과와 다름"),
     perBeneficiary: expectedIds.map((id, i) => {
       const p = byId.get(id);
+      const disposal = summary.disposals.find((d) => d.id === id);
       return {
         disposalId: id,
-        beneficiaryAndProperty: field(`1. 수익자 ${i + 1}`, p?.beneficiaryAndProperty ?? ""),
+        beneficiaryAndProperty: expectName(
+          field(`1. 수익자 ${i + 1}`, p?.beneficiaryAndProperty ?? ""),
+          disposal?.beneficiary,
+          "수익자 이름이 정리 결과와 다름",
+        ),
         fraudulentAct: field(`3. 수익자 ${i + 1}`, p?.fraudulentAct ?? ""),
         claimDraft: field(`5. 수익자 ${i + 1}`, p?.claimDraft ?? ""),
       };
@@ -341,11 +356,17 @@ export function validateCompareOutput(
     if (!missing && text && valid.length === 0) problems.push(`${where}: 원문 위치가 없음`);
     // 원문에 없는 날짜는 [확인 필요]를 붙인다
     const known = datesIn(corpus);
+    const squeezedCorpus = squeeze(corpus);
     const marked = missing
       ? text
-      : text.replace(DATE_PATTERN, (match, y, m, d) =>
-          known.has(normalizeDate(y, m, d)) ? match : `${match} ${NEEDS_CHECK}(원문에 없는 날짜)`,
-        );
+      : text
+          .replace(DATE_PATTERN, (match, y, m, d) =>
+            known.has(normalizeDate(y, m, d)) ? match : `${match} ${NEEDS_CHECK}(원문에 없는 날짜)`,
+          )
+          // 사건번호(예: 2026가합12345, 2026-사해-0101)도 원문에 그대로 있어야 한다
+          .replace(CASE_NUMBER_PATTERN, (match) =>
+            squeezedCorpus.includes(squeeze(match)) ? match : `${match} ${NEEDS_CHECK}(원문에 없는 사건번호)`,
+          );
     return { text: marked, sources: valid.map(toSourceLocation), missing };
   };
 
