@@ -46,6 +46,7 @@ export function computeDeadline(
   let deadline: IsoDate | null = null;
   let daysLeft: number | null = null;
   let fiveYearOnly = false;
+  let oneYearOnly = false;
   if (oneYearEnd && fiveYearEnd) {
     deadline = oneYearEnd < fiveYearEnd ? oneYearEnd : fiveYearEnd;
     daysLeft = daysBetween(today, deadline);
@@ -53,6 +54,11 @@ export function computeDeadline(
     deadline = fiveYearEnd;
     daysLeft = daysBetween(today, fiveYearEnd);
     fiveYearOnly = true;
+  } else if (oneYearEnd && !fiveYearEnd && daysBetween(today, oneYearEnd) <= 0) {
+    // 법률행위일이 없어도 '안 날' 1년 기한이 지났으면, 5년 기한이 더 늦든 이르든 먼저 끝나는 쪽은 이미 지난 것이다
+    deadline = oneYearEnd;
+    daysLeft = daysBetween(today, oneYearEnd);
+    oneYearOnly = true;
   }
 
   return {
@@ -62,11 +68,16 @@ export function computeDeadline(
     deadline,
     daysLeft,
     fiveYearOnly,
+    oneYearOnly,
     level: levelOf(daysLeft),
   };
 }
 
-/** 처분행위마다 따로 계산하고, 가장 짧은 것을 경고 기준으로 고른다 */
+/**
+ * 처분행위마다 따로 계산하고, 경고 기준이 되는 한 줄을 고른다.
+ * 계산된 것 중 가장 짧은 기한이 경과·임박이면 그것을 쓴다. 그렇지 않은데 날짜가 없어 계산 못 한 처분행위가
+ * 하나라도 있으면 "여유 있음"이라고 안심시키지 않고 [확인 필요]를 보여 준다 (CLAUDE.md 6장).
+ */
 export function computeDeadlines(
   disposals: Pick<Disposal, "id" | "legalActDate">[],
   cancellationKnownDate: IsoDate | null,
@@ -75,10 +86,12 @@ export function computeDeadlines(
   const perDisposal = disposals.map((d) => computeDeadline(d, cancellationKnownDate, today));
 
   const computed = perDisposal.filter((r) => r.daysLeft !== null);
+  const minComputed = computed.length > 0 ? computed.reduce((min, r) => (r.daysLeft! < min.daysLeft! ? r : min)) : null;
+  const unknown = perDisposal.find((r) => r.daysLeft === null) ?? null;
   const shortest =
-    computed.length > 0
-      ? computed.reduce((min, r) => (r.daysLeft! < min.daysLeft! ? r : min))
-      : (perDisposal[0] ?? null);
+    minComputed && (minComputed.level === "expired" || minComputed.level === "warning" || !unknown)
+      ? minComputed
+      : (unknown ?? perDisposal[0] ?? null);
 
   return { perDisposal, shortest };
 }

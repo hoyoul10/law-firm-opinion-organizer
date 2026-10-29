@@ -141,6 +141,7 @@ export function draftInstructions(): string {
 
 [규칙]
 - 정리 결과와 회신 원문에 있는 사실만 쓴다. 없는 사실을 만들지 않는다.
+- 정리 결과의 identity.manualLabel(담당자가 직접 정한 사건 표시)이 비어 있지 않으면, 1번 debtor의 맨 앞에 그 글을 글자 그대로 한 줄로 쓴다.
 - 날짜·금액·당사자 이름은 회신 원문 표기를 글자 그대로 옮긴다 (예: "2025. 3. 14.", "50,000,000원"). 바꾸거나 반올림하지 않는다.
 - 회신이 아예 다루지 않은 항목은 정확히 "${NOT_IN_REPLY}"로 쓴다.
 - 회신이 다루었지만 확신할 수 없는 부분은 그 문장 앞에 "${NEEDS_CHECK}"를 붙인다. 점검 결과가 "불명확"인 내용도 ${NEEDS_CHECK}로 표시한다.
@@ -181,7 +182,7 @@ export function draftInput(
           .map((d) => {
             const disposal = summary.disposals.find((x) => x.id === d.disposalId);
             const name = disposal ? `${disposal.kind}(수익자 ${disposal.beneficiary})` : d.disposalId;
-            return `- ${name}: 1년 기한 ${d.oneYearEnd ?? "담당자가 취소원인을 안 날을 입력하지 않음"}, 5년 기한 ${d.fiveYearEnd ?? "법률행위 일자 없음"}, 적용 기한 ${d.deadline ?? NEEDS_CHECK}, 남은 일수 ${d.daysLeft ?? NEEDS_CHECK}, 판정 ${LEVEL_TEXT[d.level]}${d.fiveYearOnly ? " (취소원인을 안 날은 입력되지 않았지만 법률행위일 5년 기한이 이미 지나 경과로 봄)" : ""}`;
+            return `- ${name}: 1년 기한 ${d.oneYearEnd ?? "담당자가 취소원인을 안 날을 입력하지 않음"}, 5년 기한 ${d.fiveYearEnd ?? "법률행위 일자 없음"}, 적용 기한 ${d.deadline ?? NEEDS_CHECK}, 남은 일수 ${d.daysLeft ?? NEEDS_CHECK}, 판정 ${LEVEL_TEXT[d.level]}${d.fiveYearOnly ? " (취소원인을 안 날은 입력되지 않았지만 법률행위일 5년 기한이 이미 지나 경과로 봄)" : ""}${d.oneYearOnly ? " (법률행위 일자는 없지만 취소원인을 안 날 1년 기한이 이미 지나 경과로 봄)" : ""}`;
           })
           .join("\n")
       : `- 처분행위가 없어 계산하지 못함 ${NEEDS_CHECK}`;

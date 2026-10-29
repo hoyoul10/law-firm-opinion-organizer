@@ -9,6 +9,7 @@ import { errorFromParse } from "../lib/server/respond";
 import { countNeedsCheck } from "../lib/draft";
 import { draftInput, summarizeInstructions, tagSources } from "../lib/server/prompts";
 import { computeDeadline, computeDeadlines } from "../lib/deadline";
+import { deadlineMessage } from "../lib/labels";
 import JSZip from "jszip";
 import { buildHwpx, hwpxFileName } from "../lib/export-hwpx";
 import { buildDownloadHtml, escapeHtml } from "../lib/export-html";
@@ -320,7 +321,7 @@ console.log("\n■ OCR (PLAN 33)");
   check("요청한 쪽이 빠지면 막음", !validateOcrOutput(out([{ page: 1, paragraphs: ["내용"] }]), [1, 2]).ok);
   check("요청하지 않은 쪽이 있으면 막음", !validateOcrOutput(out([{ page: 1, paragraphs: ["내용"] }, { page: 9, paragraphs: ["내용"] }]), [1]).ok);
   check("같은 쪽이 두 번 오면 막음", !validateOcrOutput(out([{ page: 1, paragraphs: ["내용"] }, { page: 1, paragraphs: ["내용"] }]), [1, 1]).ok);
-  check("모든 쪽이 비어 있으면(글자를 못 읽음) 막음", !validateOcrOutput(out([{ page: 1, paragraphs: [] }, { page: 2, paragraphs: ["  ", "- 2 -"] }]), [1, 2]).ok);
+  check("4쪽 묶음이 모두 빈 쪽(양면 스캔 뒷면 등)이어도 막지 않음", validateOcrOutput(out([{ page: 1, paragraphs: [] }, { page: 2, paragraphs: ["  ", "- 2 -"] }]), [1, 2]).ok);
   check("쪽 순서대로 정렬", validateOcrOutput(out([{ page: 3, paragraphs: ["셋"] }, { page: 1, paragraphs: ["하나"] }]), [1, 3]).ok);
 
   const jpeg = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
@@ -338,6 +339,83 @@ console.log("\n■ OCR (PLAN 33)");
   check("정리 지시문에 OCR 줄 처리 규칙이 있음", summarizeInstructions("fraudulent-transfer").includes("OCR로 읽은 줄"));
   const ocrHtml = buildDownloadHtml({ createdAt: "2026-10-28", summary: good.ok ? good.summary : (undefined as never), deadlines: null, draft: null, ocrFileNames: ["스캔<1>.pdf"] });
   check("내려받는 HTML에 OCR 안내(특수문자 처리 포함)", ocrHtml.includes("OCR(AI 글자 인식)로 읽은 파일") && ocrHtml.includes("스캔&lt;1&gt;.pdf"));
+}
+
+console.log("\n■ 차이 분석 2차 수정 (OCR 표시 전달, 날짜·이름 원문 대조, 제척기간 빈틈)");
+{
+  // 1. 요청 검사를 거쳐도 OCR 표시가 남아 AI 꼬리표에 "·OCR"이 붙는다
+  const ocrReq = { ...input, sources: [{ ...input.sources[0], ocr: true }, input.sources[1]] };
+  const parsedReq = ReplyInputSchema.safeParse(ocrReq);
+  check("요청 검사 뒤에도 ocr 표시가 남음", parsedReq.success && parsedReq.data.sources[0].ocr === true);
+  check("검사를 거친 요청의 꼬리표에 OCR 표시", parsedReq.success && tagSources(parsedReq.data.sources).startsWith("[라온_1차회신.pdf | 1차·OCR |"));
+
+  // 2. 법률행위일·수익자 이름을 원문과 맞춰 본다
+  const wrongDate = goodOutput();
+  wrongDate.disposals[0].legalActDate = "2024-01-01";
+  const wd = validateSummaryOutput(wrongDate, input);
+  check("원문에 없는 법률행위일은 비움([확인 필요]로 이어짐)", wd.ok && wd.summary.disposals[0].legalActDate === null, wd.ok ? "" : wd.problems.join(" / "));
+  const okDate = validateSummaryOutput(goodOutput(), input);
+  check("원문에 있는 법률행위일(2025. 8. 30.)은 그대로", okDate.ok && okDate.summary.disposals[0].legalActDate === "2025-08-30");
+  const wrongName = goodOutput();
+  wrongName.disposals[0].beneficiary = "수익자 가짜이름 씨";
+  const wn = validateSummaryOutput(wrongName, input);
+  check("원문에 없는 수익자 이름은 덧붙인 말을 떼고 [확인 필요]를 붙임", wn.ok && wn.summary.disposals[0].beneficiary === "[확인 필요] 가짜이름", wn.ok ? wn.summary.disposals[0].beneficiary : wn.problems.join(" / "));
+  const prefixedName = goodOutput();
+  prefixedName.disposals[0].beneficiary = "수익자 남수익 씨";
+  const pn = validateSummaryOutput(prefixedName, input);
+  check("원문에 있는 이름은 덧붙인 말만 떼고 그대로", pn.ok && pn.summary.disposals[0].beneficiary === "남수익");
+
+  // 3·4·15. 제척기간 빈틈
+  const T = "2026-10-28";
+  const d = (legalActDate: string | null, known: string | null) => computeDeadline({ id: "x", legalActDate }, known, T);
+  const oneOnly = d(null, "2025-10-01");
+  check("안 날 1년이 지났고 법률행위일이 없으면 빨강", oneOnly.level === "expired" && oneOnly.oneYearOnly === true && oneOnly.daysLeft !== null && oneOnly.daysLeft < 0, JSON.stringify(oneOnly));
+  check("안 날 1년이 아직 안 지났고 법률행위일이 없으면 [확인 필요]", d(null, "2026-01-01").level === "needs-check");
+  const shortestMix = computeDeadlines([{ id: "a", legalActDate: "2025-08-30" }, { id: "b", legalActDate: null }], "2026-10-01", T);
+  check("날짜 없는 처분행위가 있으면 맨 위 줄이 초록이 아니라 [확인 필요]", shortestMix.shortest?.disposalId === "b" && shortestMix.shortest.level === "needs-check", JSON.stringify(shortestMix.shortest));
+  const warnMix = computeDeadlines([{ id: "a", legalActDate: "2021-12-20" }, { id: "b", legalActDate: null }], "2026-10-01", T);
+  check("임박(노랑) 처분행위가 있으면 날짜 없는 것이 있어도 노랑을 보여 줌", warnMix.shortest?.disposalId === "a" && warnMix.shortest.level === "warning");
+  check("전부 계산되면 가장 짧은 것", computeDeadlines([{ id: "a", legalActDate: "2025-08-30" }, { id: "b", legalActDate: "2021-12-20" }], "2026-10-01", T).shortest?.disposalId === "b");
+  check("기한이 오늘(0일)이면 '오늘이 마지막 날'", deadlineMessage(d("2021-10-28", null)).includes("오늘이 마지막 날") && !deadlineMessage(d("2021-10-28", null)).includes("0일 지남"));
+
+  // 17. 90일·91일 경계와 윤년
+  // 안 날 2026-01-26 → 1년 기한 2027-01-26 → 오늘(2026-10-28)부터 90일, 하루 늦은 안 날은 91일
+  const r90 = d("2031-01-01", "2026-01-26");
+  const r91 = d("2031-01-01", "2026-01-27");
+  check("90일 남음은 노랑, 91일은 초록 (경계)", r90.daysLeft === 90 && r90.level === "warning" && r91.daysLeft === 91 && r91.level === "ok", `${r90.daysLeft}/${r91.daysLeft}`);
+  const leap = d("2020-02-29", null); // 5년 기한: 2020-03-01부터 5년 → 2025-02-28 또는 03-01
+  check("윤년(2020-02-29) 법률행위의 5년 기한이 계산됨", leap.fiveYearEnd === "2025-02-28", leap.fiveYearEnd ?? "null");
+  const leapKnown = d(null, "2024-02-29");
+  check("윤년(2024-02-29) 안 날의 1년 기한이 계산됨", leapKnown.oneYearEnd === "2025-02-28", leapKnown.oneYearEnd ?? "null");
+
+  // 10·11. 초안: 직접 정한 사건 표시와 처분행위 0개
+  if (good.ok) {
+    const base = {
+      debtor: "서채무",
+      perBeneficiary: [{ disposalId: "d1", beneficiaryAndProperty: "남수익 — 아파트", fraudulentAct: "2025. 8. 30. 매도", claimDraft: "가액배상" }],
+      securedClaim: "보증채무",
+      deadlineReview: "여유 있음",
+      preservation: "가압류 검토",
+      firmOpinionSummary: "법무법인은 소 제기를 검토할 만하다고 봄",
+      attachmentsAndChecks: "등기부",
+    };
+    const labeled = validateDraftOutput(base, { ...good.summary, identity: { ...good.summary.identity, manualLabel: "가명 사건 A" } }, null, input.sources);
+    check("직접 정한 사건 표시가 초안 1번에 들어감", labeled.ok && labeled.draft.debtor.startsWith("가명 사건 A"), labeled.ok ? labeled.draft.debtor : "");
+    const already = validateDraftOutput({ ...base, debtor: "가명 사건 A 서채무" }, { ...good.summary, identity: { ...good.summary.identity, manualLabel: "가명 사건 A" } }, null, input.sources);
+    check("이미 들어 있으면 중복해서 붙이지 않음", already.ok && already.draft.debtor === "가명 사건 A 서채무");
+    const none = validateDraftOutput(
+      { ...base, perBeneficiary: [{ disposalId: "none", beneficiaryAndProperty: "아무 말", fraudulentAct: "지어낸 내용", claimDraft: "지어낸 청구" }] },
+      { ...good.summary, disposals: [] },
+      null,
+      input.sources,
+    );
+    check("처분행위가 0개면 AI가 무엇을 써도 수익자 칸 3개를 '회신에 없음'으로 고정", none.ok && none.draft.perBeneficiary.length === 1 && Object.values(none.draft.perBeneficiary[0]).slice(1).every((v) => v === NOT_IN_REPLY));
+    const fbName = validateDraftOutput(base, { ...good.summary, disposals: [{ ...good.summary.disposals[0], beneficiary: "[확인 필요] 남수익" }] }, null, input.sources);
+    check("수익자 이름 앞의 [확인 필요]는 이름 대조에서 제외", fbName.ok && !fbName.draft.perBeneficiary[0].beneficiaryAndProperty.includes("정리 결과와 다름"));
+    // 18. 낡은 결과 경고가 내려받는 파일에도 들어간다
+    const stale = buildDownloadHtml({ createdAt: "2026-10-28", summary: good.summary, deadlines: null, draft: base, staleNotices: ["초안 4번이 <낡았어요>"] });
+    check("내려받는 HTML에 낡은 결과 경고(특수문자 처리 포함)", stale.includes("초안 4번이 &lt;낡았어요&gt;"));
+  }
 }
 
 async function hwpxChecks() {

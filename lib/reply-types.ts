@@ -182,6 +182,8 @@ export interface DeadlineResult {
   daysLeft: number | null;
   /** '안 날'이 없지만 5년 기한이 이미 지나 경과로 본 경우 */
   fiveYearOnly?: boolean;
+  /** 법률행위 일자가 없지만 '안 날' 1년 기한이 이미 지나 경과로 본 경우 */
+  oneYearOnly?: boolean;
   level: DeadlineLevel;
 }
 
@@ -313,7 +315,8 @@ export interface CompareRequest {
 /** POST /api/draft 요청. 날짜·금액·이름을 원문과 대조하려고 원문 글자도 함께 보낸다 */
 export interface DraftRequest {
   summary: ReplySummary;
-  deadlines: DeadlineSummary | null;
+  /** 서버가 이 날짜로 제척기간을 다시 계산한다 */
+  cancellationKnownDate: IsoDate | null;
   sources: ExtractedSource[];
 }
 
@@ -328,4 +331,6 @@ export interface DownloadBundle {
   compare?: CaseCompare | null;
   /** OCR로 읽은 파일 이름들. 내려받는 파일에 "인식 오류 가능" 안내를 넣는다 */
   ocrFileNames?: string[];
+  /** 내려받을 때 확인창에 떴던 "결과가 낡았다" 같은 경고. 파일을 받는 검토자도 알 수 있게 담는다 */
+  staleNotices?: string[];
 }

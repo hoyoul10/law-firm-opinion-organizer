@@ -19,6 +19,10 @@ import type { ExtractResult } from "./types";
 const CONCURRENCY = 3;
 /** 쪽 그림 한 장의 base64 글자 수 상한 (서버 상한 100만 자보다 작게) */
 const MAX_IMAGE_CHARS = 900_000;
+/** OCR 요청이 너무 크다는 답(413)일 때 보여 줄 문구. 회신 길이와는 상관없다 */
+const OCR_MESSAGES = {
+  PAYLOAD_TOO_LARGE: "쪽 그림이 너무 커서 보내지 못했어요. 쪽 크기가 아주 큰 스캔본일 수 있어요. 스캔 크기를 줄여 다시 올려 주세요.",
+};
 
 const fail = (message: string): ExtractResult => ({ ok: false, code: "OCR_FAILED", message });
 
@@ -71,23 +75,33 @@ export async function ocrPdf(
     let done = 0;
     let next = 0;
     let failure: string | null = null;
+    /** 한 작업자가 실패하면 나머지도 바로 멈춘다 (이미 보낸 요청 말고는 더 보내지 않아 비용이 새지 않는다) */
+    const stopped = () => failure !== null || signal.aborted;
 
     const worker = async () => {
-      while (failure === null && !signal.aborted) {
-        const index = next++;
-        if (index >= batches.length) return;
-        const images: OcrPageImage[] = [];
-        for (const n of batches[index]) images.push({ page: n, image: await renderPage(doc, n) });
-        if (signal.aborted) return;
-        const request: OcrRequest = { pages: images };
-        const res = await postJson<OcrResponse>("/api/ocr", request, signal);
-        if (!res.ok) {
-          if (!res.aborted && failure === null) failure = res.message;
-          return;
+      try {
+        while (!stopped()) {
+          const index = next++;
+          if (index >= batches.length) return;
+          const images: OcrPageImage[] = [];
+          for (const n of batches[index]) {
+            if (stopped()) return;
+            images.push({ page: n, image: await renderPage(doc, n) });
+          }
+          if (stopped()) return;
+          const request: OcrRequest = { pages: images };
+          const res = await postJson<OcrResponse>("/api/ocr", request, signal, OCR_MESSAGES);
+          if (!res.ok) {
+            if (!res.aborted && failure === null) failure = res.message;
+            return;
+          }
+          for (const p of res.data.pages) texts.set(p.page, p.paragraphs);
+          done += batches[index].length;
+          onProgress(done, total);
         }
-        for (const p of res.data.pages) texts.set(p.page, p.paragraphs);
-        done += batches[index].length;
-        onProgress(done, total);
+      } catch {
+        // 쪽 그림 만들기 같은 예외도 다른 작업자가 멈추도록 실패로 기록한다
+        if (failure === null) failure = "쪽을 그림으로 만들다 실패했어요 (파일이 너무 크거나 손상됐을 수 있어요).";
       }
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, worker));
@@ -99,6 +113,7 @@ export async function ocrPdf(
       .sort((a, b) => a[0] - b[0])
       .flatMap(([page, paragraphs]) => paragraphs.map((text, i) => ({ page, paragraph: i + 1, text })));
     const chars = segments.reduce((sum, s) => sum + s.text.length, 0);
+    // 문서 전체에서 글자를 거의 못 읽었을 때만 실패로 본다 (빈 쪽이 이어지는 양면 스캔 등은 서버가 쪽 묶음마다 실패로 보지 않는다)
     if (chars < 20) return fail("글자를 거의 읽지 못했어요. 스캔 상태를 확인해 주세요.");
 
     return { ok: true, source: { fileName, kind: "pdf", round, ocr: true, segments }, pages: total, chars };

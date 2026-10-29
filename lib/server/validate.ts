@@ -155,19 +155,33 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
       : { text: NOT_IN_REPLY, sources: [] as SourceLocation[] };
 
   // 처분행위
+  const sourceDates = datesIn(input.sources.flatMap((s) => s.segments.map((seg) => seg.text)).join("\n"));
   const seenIds = new Set<string>();
   const disposals = output.disposals.map((d, i) => {
     const where = `처분행위 ${i + 1}`;
     if (!d.id.trim() || seenIds.has(d.id)) problems.push(`${where}: id가 비었거나 겹침`);
     seenIds.add(d.id);
-    const legalActDate = clean(d.legalActDate);
+    let legalActDate = clean(d.legalActDate);
     if (legalActDate && !isIsoDate(legalActDate)) problems.push(`${where}: 법률행위 일자가 YYYY-MM-DD 형식이 아님 (${legalActDate})`);
+    // 제척기간은 이 날짜로 계산하므로 원문에 그 날짜가 실제로 있어야 한다. 없으면 AI가 잘못 바꾼 것일 수 있어 비우고 [확인 필요]로 둔다
+    if (legalActDate && isIsoDate(legalActDate)) {
+      const [y, mo, da] = legalActDate.split("-");
+      if (!sourceDates.has(normalizeDate(y, mo, da))) legalActDate = null;
+    }
     const valid = validLocations(d.sources);
     if (valid.length === 0) problems.push(`${where}: 원문 위치가 없음`);
+    // 수익자 이름도 원문에 글자 그대로 있어야 한다. 덧붙인 말은 떼고, 그래도 없으면 [확인 필요]를 붙인다
+    const rawBeneficiary = d.beneficiary.trim();
+    const bareBeneficiary = rawBeneficiary.replace(/^(수익자|피고)\s*[:：]?\s*/, "").replace(/\s*(씨|님)$/, "").trim();
+    const beneficiary = !bareBeneficiary
+      ? rawBeneficiary
+      : findFirst(input, bareBeneficiary)
+        ? bareBeneficiary
+        : `${NEEDS_CHECK} ${bareBeneficiary}`;
     return {
       id: d.id,
       kind: d.kind.trim(),
-      beneficiary: d.beneficiary.trim(),
+      beneficiary,
       subsequentAcquirer: clean(d.subsequentAcquirer),
       property: d.property.trim(),
       legalActDate,
@@ -303,22 +317,32 @@ export function validateDraftOutput(
   }
 
   // 당사자 이름은 정리 결과(원문에서 서버가 확인한 이름)와 같아야 한다. 다르면 [확인 필요]를 붙인다
-  const plainName = (name: string | null | undefined) => (name ?? "").replace(/\s*씨$/, "").trim();
+  const plainName = (name: string | null | undefined) =>
+    (name ?? "").replace(NEEDS_CHECK, "").replace(/\s*씨$/, "").trim();
   const expectName = (text: string, name: string | null | undefined, note: string) => {
     const n = plainName(name);
     return n && !text.includes(n) ? `${text} ${NEEDS_CHECK}(${note})` : text;
   };
 
+  // 담당자가 직접 정한 사건 표시는 초안 1번 맨 앞에 그대로 나와야 한다 (Design §3.1 ②)
+  const manualLabel = summary.identity.manualLabel?.trim();
+  let debtor = expectName(field("1. 채무자", output.debtor), summary.identity.debtorName, "채무자 이름이 정리 결과와 다름");
+  if (manualLabel && !debtor.includes(manualLabel)) debtor = `${manualLabel}\n${debtor}`;
+
   const draft: LawsuitDraft = {
-    debtor: expectName(field("1. 채무자", output.debtor), summary.identity.debtorName, "채무자 이름이 정리 결과와 다름"),
+    debtor,
     perBeneficiary: expectedIds.map((id, i) => {
       const p = byId.get(id);
       const disposal = summary.disposals.find((d) => d.id === id);
+      // 처분행위가 하나도 없으면 수익자 칸 1개는 AI가 무엇을 쓰든 "회신에 없음"으로 고정한다 (Design §3.1 ③)
+      if (!disposal) {
+        return { disposalId: id, beneficiaryAndProperty: NOT_IN_REPLY, fraudulentAct: NOT_IN_REPLY, claimDraft: NOT_IN_REPLY };
+      }
       return {
         disposalId: id,
         beneficiaryAndProperty: expectName(
           field(`1. 수익자 ${i + 1}`, p?.beneficiaryAndProperty ?? ""),
-          disposal?.beneficiary,
+          disposal.beneficiary,
           "수익자 이름이 정리 결과와 다름",
         ),
         fraudulentAct: field(`3. 수익자 ${i + 1}`, p?.fraudulentAct ?? ""),
@@ -426,8 +450,9 @@ export function validateCompareOutput(
 export type OcrValidationResult = { ok: true; pages: OcrPageText[] } | { ok: false; problems: string[] };
 
 /**
- * OCR 결과 검사. 요청한 쪽이 빠짐없이 그대로 돌아왔는지, 쪽 번호만 있는 줄을 걸러내고,
- * 모든 쪽이 비어 있으면(글자를 하나도 못 읽음) 실패로 본다.
+ * OCR 결과 검사. 요청한 쪽이 빠짐없이 그대로 돌아왔는지 보고, 쪽 번호만 있는 줄을 걸러낸다.
+ * 이 요청은 4쪽 묶음이라 빈 쪽(양면 스캔의 뒷면 등)이 이어질 수 있으므로 "글자가 하나도 없음"은 여기서 실패로 보지 않는다.
+ * 문서 전체에서 글자를 거의 못 읽은 경우는 브라우저가 전체 합계로 판단한다 (lib/extract/ocr.ts).
  */
 export function validateOcrOutput(output: OcrOutput, requestedPages: number[]): OcrValidationResult {
   const problems: string[] = [];
@@ -442,7 +467,6 @@ export function validateOcrOutput(output: OcrOutput, requestedPages: number[]): 
     }))
     .sort((a, b) => a.page - b.page);
 
-  if (pages.every((p) => p.paragraphs.length === 0)) problems.push("글자를 하나도 읽지 못함");
   const tooLong = pages.flatMap((p) => p.paragraphs).find((t) => t.length > 20_000);
   if (tooLong) problems.push("한 문단이 2만 자를 넘음");
 

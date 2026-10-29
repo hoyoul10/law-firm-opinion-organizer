@@ -23,6 +23,8 @@ export const ExtractedSourceSchema = z.object({
   fileName: z.string().trim().min(1).max(200),
   kind: z.enum(["pdf", "hwpx", "email"]),
   round: z.union([z.literal(1), z.literal(2)]),
+  /** OCR로 읽은 파일 표시. 칸을 비워 두면 zod가 지워 버려 AI가 "OCR" 꼬리표를 받지 못한다 */
+  ocr: z.boolean().optional(),
   segments: z.array(TextSegmentSchema).min(1).max(5_000),
 });
 
@@ -135,21 +137,17 @@ const ReplySummarySchema = z.object({
   typeMismatchWarning: z.string().nullable(),
 });
 
-const DeadlineResultSchema = z.object({
-  disposalId: z.string(),
-  oneYearEnd: IsoDateSchema.nullable(),
-  fiveYearEnd: IsoDateSchema.nullable(),
-  deadline: IsoDateSchema.nullable(),
-  daysLeft: z.number().int().nullable(),
-  fiveYearOnly: z.boolean().optional(),
-  level: z.enum(["ok", "warning", "expired", "needs-check"]),
-});
-
-/** POST /api/draft 요청. 사해행위취소만, 사건 표시가 정해져 있어야 한다 */
+/**
+ * POST /api/draft 요청. 사해행위취소만, 사건 표시가 정해져 있어야 한다.
+ * 제척기간은 화면이 계산한 값을 믿지 않고, 서버가 '안 날'로 다시 계산한다.
+ */
 export const DraftRequestSchema = z
   .object({
     summary: ReplySummarySchema,
-    deadlines: z.object({ perDisposal: z.array(DeadlineResultSchema), shortest: DeadlineResultSchema.nullable() }).nullable(),
+    cancellationKnownDate: IsoDateSchema.nullable().refine(
+      (d) => d === null || !isAfter(d, todayInSeoul()),
+      "취소원인을 안 날은 오늘 이후일 수 없어요",
+    ),
     sources: z.array(ExtractedSourceSchema).min(1).max(30),
   })
   .refine((r) => r.summary.lawsuitType === "fraudulent-transfer", "초안은 사해행위취소 전용이에요")

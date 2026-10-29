@@ -3,7 +3,7 @@
 // ② 사건정보 대조 (선택). 평소에는 쓰지 않고, 필요할 때만 법원 '나의 사건검색' PDF를 올려 [대조 요청]을 누른다.
 // Design Ref: §13.1 — 정리하기와 별개 동작, 저장하지 않음, 다른 항목을 눈에 띄게 표시
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { extractFile } from "@/lib/extract";
 import { EXTRACT_ERROR_MESSAGES, type ExtractResult } from "@/lib/extract/types";
 import {
@@ -33,10 +33,16 @@ interface Props {
 export default function CaseInfoCompare({ compare, busy, error, onCompare }: Props) {
   const [file, setFile] = useState<{ name: string; result: ExtractResult | null } | null>(null);
 
+  /** 파일을 고를 때마다 올린다. 읽는 중에 다른 파일을 골랐다면 늦게 끝난 옛 파일의 결과는 버린다 */
+  const pickId = useRef(0);
+
   const pick = (f: File | undefined) => {
     if (!f) return;
+    const id = ++pickId.current;
     setFile({ name: f.name, result: null });
-    void extractFile(f, 1).then((result) => setFile({ name: f.name, result }));
+    void extractFile(f, 1).then((result) => {
+      if (id === pickId.current) setFile({ name: f.name, result });
+    });
   };
 
   const ready = file?.result?.ok ? file.result : null;
@@ -72,7 +78,12 @@ export default function CaseInfoCompare({ compare, busy, error, onCompare }: Pro
             {file.result === null && "읽는 중…"}
             {file.result?.ok && `${file.result.pages}쪽 · ${file.result.chars.toLocaleString()}자 ✓`}
             {file.result && !file.result.ok && (
-              <span className="text-red-700 dark:text-red-300">⚠ {EXTRACT_ERROR_MESSAGES[file.result.code]}</span>
+              <span className="text-red-700 dark:text-red-300">
+                ⚠{" "}
+                {file.result.code === "SCAN_PDF"
+                  ? "글자를 읽을 수 없는 PDF예요 (스캔한 그림일 수 있어요). 이 칸은 OCR을 지원하지 않아요. 법원 화면을 PDF로 저장한 파일(글자가 들어 있는 것)을 올려 주세요."
+                  : EXTRACT_ERROR_MESSAGES[file.result.code]}
+              </span>
             )}
           </span>
         )}

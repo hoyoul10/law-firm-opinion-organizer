@@ -170,7 +170,7 @@ export default function ReplyOrganizer() {
     if (!summary) return;
     if (draft && !downloaded && !window.confirm("고친 초안이 있어요. 다시 만들면 고친 내용이 지워져요. 계속할까요?")) return;
     const knownDate = input.cancellationKnownDate;
-    const body: DraftRequest = { summary, deadlines, sources: sentSources };
+    const body: DraftRequest = { summary, cancellationKnownDate: knownDate || null, sources: sentSources };
     setBusy("draft");
     setFailure(null);
     const result = await postJson<{ draft: LawsuitDraft }>("/api/draft", body);
@@ -188,12 +188,15 @@ export default function ReplyOrganizer() {
 
   const download = async (format: "html" | "hwpx" = "html") => {
     if (!summary) return;
+    // 낡은 결과 경고는 확인창에만 두지 않고 파일에도 담아, 파일을 받는 검토자도 알 수 있게 한다
+    const staleNotices: string[] = [];
+    if (draftStale) staleNotices.push("초안 4번(제척기간)이 지금 입력한 '취소원인을 안 날'과 다른 값으로 만들어졌어요.");
+    if (inputStale) staleNotices.push("정리한 뒤에 입력(소송 유형·파일·이메일)이 바뀌었어요. 결과는 이전 입력 기준이에요.");
     const warnings: string[] = [];
     if (remaining > 0) warnings.push(`초안에 [확인 필요] 표시가 ${remaining}곳 남아 있어요.`);
-    if (draftStale) warnings.push("초안 4번(제척기간)이 지금 입력한 '취소원인을 안 날'과 다른 값으로 만들어졌어요.");
-    if (inputStale) warnings.push("정리한 뒤에 입력(소송 유형·파일·이메일)이 바뀌었어요. 결과는 이전 입력 기준이에요.");
+    warnings.push(...staleNotices);
     if (warnings.length > 0 && !window.confirm(`${warnings.join("\n")}\n그래도 내려받을까요?`)) return;
-    const bundle = { createdAt: today, summary, deadlines, draft, compare, ocrFileNames };
+    const bundle = { createdAt: today, summary, deadlines, draft, compare, ocrFileNames, staleNotices };
     if (format === "hwpx") await downloadHwpx(bundle);
     else downloadHtml(bundle);
     setDownloaded(true);
@@ -250,6 +253,16 @@ export default function ReplyOrganizer() {
             ) : (
               <>
                 {needsCaseLabel && <span className="text-sm text-zinc-500">사건 표시를 먼저 정해 주세요.</span>}
+                {/* 초안 없이 정리 결과만 받고 싶을 때. 초안을 만들면 아래 ③에 내려받기 버튼이 따로 나온다 */}
+                {!draft && (
+                  <button
+                    type="button"
+                    onClick={() => void download("html")}
+                    className="rounded-lg border border-zinc-900 px-5 py-2.5 text-sm font-semibold text-zinc-900 dark:border-white dark:text-white"
+                  >
+                    정리 결과만 HTML로 내려받기
+                  </button>
+                )}
                 <button type="button" onClick={makeDraft} disabled={busy !== null || needsCaseLabel} className={PRIMARY_BUTTON}>
                   {busy === "draft" ? "초안 만드는 중… (30초 안팎)" : draft ? "초안 다시 만들기" : "초안 만들기"}
                 </button>
