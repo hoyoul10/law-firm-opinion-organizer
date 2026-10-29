@@ -42,7 +42,7 @@ export function tagSources(sources: ExtractedSource[]): string {
         const round = (source.round === 2 ? "2차 보완" : "1차") + (source.ocr ? "·OCR" : "");
         const page = source.kind === "pdf" && seg.page ? String(seg.page) : "-";
         // 원문이 구분 표시(<회신원문> 등)를 흉내 내 묶음을 빠져나가지 못하게 지운다
-        const text = seg.text.replace(/<\/?(?:회신원문|사건정보원문)>/g, "").replace(/\s+/g, " ").trim();
+        const text = seg.text.replace(/[<〈＜]\s*\/?\s*(?:회신원문|사건정보원문)\s*[>〉＞]/g, "").replace(/\s+/g, " ").trim();
         return `[${source.fileName} | ${round} | ${page} | ${seg.paragraph}] ${text}`;
       }),
     )

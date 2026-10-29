@@ -8,5 +8,13 @@ export const PAGE_NUMBER = /^[-–\s]*\d+\s*(\/\s*\d+)?\s*(쪽|page)?[-–\s]*$/
  * 윈도우 파일 이름에도 `[최종]` 같은 글자가 흔해서 올리는 것을 막지 않고 이름만 고친다.
  */
 export function safeFileName(name: string): string {
-  return name.replace(/[\r\n\t|[\]]/g, "_").trim() || "파일";
+  const safe = name.replace(/[\r\n\t|[\]]/g, "_").trim() || "파일";
+  if (safe.length <= MAX_FILE_NAME) return safe;
+  // 서버 상한(200자)을 넘으면 확장자는 남기고 앞부분을 줄인다
+  const dot = safe.lastIndexOf(".");
+  const ext = dot > 0 && safe.length - dot <= 10 ? safe.slice(dot) : "";
+  return safe.slice(0, MAX_FILE_NAME - ext.length) + ext;
 }
+
+/** 서버가 받는 파일 이름 최대 글자 수 (lib/server/schemas.ts와 같게) */
+const MAX_FILE_NAME = 200;

@@ -15,7 +15,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   NETWORK: 503,
 };
 
-/** 요청 본문 상한 (4MB). 쪽 그림 6장(각 약 750KB)과 글 50장 분량이 모두 이 안에 들어간다 */
+/** 요청 본문 상한 (4MB). 브라우저가 보내는 OCR 요청(4쪽 × 그림 약 90만 자 이하)과 글 50장 분량이 이 안에 들어간다 */
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 
 export function errorResponse(code: ApiErrorCode): Response {

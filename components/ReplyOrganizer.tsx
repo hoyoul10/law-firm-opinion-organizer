@@ -78,6 +78,8 @@ export default function ReplyOrganizer() {
   const [summarySig, setSummarySig] = useState<string | null>(null);
   /** 초안을 만들 때의 '취소원인을 안 날'. 지금 값과 다르면 초안 4번(제척기간)이 낡았다고 알린다 */
   const [draftKnownDate, setDraftKnownDate] = useState<string | null>(null);
+  /** 초안을 만들 때의 법률행위일 목록. 담당자가 날짜를 직접 넣거나 지우면 초안 4번이 낡았다고 알린다 */
+  const [draftDatesSig, setDraftDatesSig] = useState<string | null>(null);
   /** 정리를 새로 시작할 때마다 올린다. 늦게 도착한 옛 대조 결과를 버리는 데 쓴다 */
   const versionRef = useRef(0);
 
@@ -89,7 +91,8 @@ export default function ReplyOrganizer() {
   const inputStale = summary !== null && summarySig !== inputSignature(input);
   /** 정리에 쓴 자료 가운데 스캔본을 OCR로 읽은 파일들. 글자 인식 오류가 있을 수 있어 결과에 알린다 */
   const ocrFileNames = sentSources.filter((s) => s.ocr).map((s) => s.fileName);
-  const draftStale = draft !== null && draftKnownDate !== input.cancellationKnownDate;
+  const datesSig = summary ? JSON.stringify(summary.disposals.map((d) => d.legalActDate)) : null;
+  const draftStale = draft !== null && (draftKnownDate !== input.cancellationKnownDate || draftDatesSig !== datesSig);
 
   // 제척기간은 AI가 아니라 코드로, 안 날을 바꾸면 바로 다시 계산한다. "기타" 유형은 계산하지 않는다
   const deadlines = useMemo(
@@ -148,6 +151,23 @@ export default function ReplyOrganizer() {
     setDownloaded(false);
   };
 
+  /** 법률행위일을 담당자가 직접 넣거나 지운다. 넣은 값은 manual로 표시해 서버의 근거 문단 대조에서 빼 준다 */
+  const setLegalActDate = (disposalId: string, date: string | null) => {
+    setSummary((prev) =>
+      prev
+        ? {
+            ...prev,
+            disposals: prev.disposals.map((d) =>
+              d.id === disposalId
+                ? { ...d, legalActDate: date, legalActDateManual: date ? true : undefined }
+                : d,
+            ),
+          }
+        : prev,
+    );
+    setDownloaded(false);
+  };
+
   const runCompare = async (caseInfo: ExtractedSource) => {
     if (!summary) return;
     const body: CompareRequest = { summary, sources: sentSources, caseInfo };
@@ -181,22 +201,28 @@ export default function ReplyOrganizer() {
     }
     setDraft(result.data.draft);
     setDraftKnownDate(knownDate);
+    setDraftDatesSig(datesSig);
     setDownloaded(false);
   };
 
   const remaining = draft && summary ? countNeedsCheck(draft, summary.disposals) : 0;
 
-  const download = async (format: "html" | "hwpx" = "html") => {
+  /** summaryOnly: 초안이 있어도 담당자 참고용 정리 결과만 내려받는다 */
+  const download = async (format: "html" | "hwpx" = "html", summaryOnly = false) => {
     if (!summary) return;
+    const fileDraft = summaryOnly ? null : draft;
     // 낡은 결과 경고는 확인창에만 두지 않고 파일에도 담아, 파일을 받는 검토자도 알 수 있게 한다
     const staleNotices: string[] = [];
     if (draftStale) staleNotices.push("초안 4번(제척기간)이 지금 입력한 '취소원인을 안 날'과 다른 값으로 만들어졌어요.");
     if (inputStale) staleNotices.push("정리한 뒤에 입력(소송 유형·파일·이메일)이 바뀌었어요. 결과는 이전 입력 기준이에요.");
     const warnings: string[] = [];
-    if (remaining > 0) warnings.push(`초안에 [확인 필요] 표시가 ${remaining}곳 남아 있어요.`);
+    if (fileDraft && remaining > 0) warnings.push(`초안에 [확인 필요] 표시가 ${remaining}곳 남아 있어요.`);
+    // 초안 파일에는 내부 경고를 담지 않으므로(OCR 한 줄 안내만 담음) 확인창에서 한 번 더 알린다
+    if (fileDraft && summary.typeMismatchWarning) warnings.push(`소송 유형 경고가 있어요: ${summary.typeMismatchWarning}`);
+    if (fileDraft && ocrFileNames.length > 0) warnings.push("OCR로 읽은 파일이 바탕이에요. 날짜·금액·이름·사건번호를 원본과 대조했는지 확인해 주세요.");
     warnings.push(...staleNotices);
     if (warnings.length > 0 && !window.confirm(`${warnings.join("\n")}\n그래도 내려받을까요?`)) return;
-    const bundle = { createdAt: today, summary, deadlines, draft, compare, ocrFileNames, staleNotices };
+    const bundle = { createdAt: today, summary, deadlines, draft: fileDraft, compare, ocrFileNames, staleNotices };
     if (format === "hwpx") await downloadHwpx(bundle);
     else downloadHtml(bundle);
     setDownloaded(true);
@@ -236,7 +262,7 @@ export default function ReplyOrganizer() {
               ⚠ {summary.typeMismatchWarning} (고른 소송 유형은 바꾸지 않았어요)
             </p>
           )}
-          {deadlines && <DeadlineTable deadlines={deadlines} disposals={summary.disposals} />}
+          {deadlines && <DeadlineTable deadlines={deadlines} disposals={summary.disposals} onSetLegalActDate={setLegalActDate} today={today} />}
           {summary.checklist && <ChecklistTable checklist={summary.checklist} />}
           <IssuesAndOpinion summary={summary} />
           <Glossary glossary={summary.glossary} />
@@ -253,16 +279,14 @@ export default function ReplyOrganizer() {
             ) : (
               <>
                 {needsCaseLabel && <span className="text-sm text-zinc-500">사건 표시를 먼저 정해 주세요.</span>}
-                {/* 초안 없이 정리 결과만 받고 싶을 때. 초안을 만들면 아래 ③에 내려받기 버튼이 따로 나온다 */}
-                {!draft && (
-                  <button
-                    type="button"
-                    onClick={() => void download("html")}
-                    className="rounded-lg border border-zinc-900 px-5 py-2.5 text-sm font-semibold text-zinc-900 dark:border-white dark:text-white"
-                  >
-                    정리 결과만 HTML로 내려받기
-                  </button>
-                )}
+                {/* 담당자·검토자 참고용 정리 결과(점검표·제척기간·원문 위치)만 받고 싶을 때. 초안이 있어도 받을 수 있다 */}
+                <button
+                  type="button"
+                  onClick={() => void download("html", true)}
+                  className="rounded-lg border border-zinc-900 px-5 py-2.5 text-sm font-semibold text-zinc-900 dark:border-white dark:text-white"
+                >
+                  정리 결과만 HTML로 내려받기
+                </button>
                 <button type="button" onClick={makeDraft} disabled={busy !== null || needsCaseLabel} className={PRIMARY_BUTTON}>
                   {busy === "draft" ? "초안 만드는 중… (30초 안팎)" : draft ? "초안 다시 만들기" : "초안 만들기"}
                 </button>

@@ -14,9 +14,12 @@ export const LEVEL_STYLE: Record<DeadlineLevel, string> = {
 interface Props {
   deadlines: DeadlineSummary;
   disposals: Disposal[];
+  /** 법률행위일을 담당자가 직접 넣는다(빈 값이면 지움). 오늘 이후 날짜는 막는다 */
+  onSetLegalActDate: (disposalId: string, date: string | null) => void;
+  today: string;
 }
 
-export default function DeadlineTable({ deadlines, disposals }: Props) {
+export default function DeadlineTable({ deadlines, disposals, onSetLegalActDate, today }: Props) {
   const byId = new Map(disposals.map((d) => [d.id, d]));
   const { shortest } = deadlines;
 
@@ -55,7 +58,37 @@ export default function DeadlineTable({ deadlines, disposals }: Props) {
                         {i + 1}. {d?.kind} · {d?.beneficiary}
                         {d?.subsequentAcquirer && <span className="text-zinc-500"> (전득자 {d.subsequentAcquirer})</span>}
                       </td>
-                      <td className="py-2">{d?.legalActDate ?? NEEDS_CHECK}</td>
+                      <td className="py-2">
+                        {d?.legalActDate ? (
+                          <>
+                            {d.legalActDate}
+                            {d.legalActDateManual && (
+                              <>
+                                <span className="ml-1 text-xs text-zinc-500">(직접 입력)</span>
+                                <button type="button" onClick={() => onSetLegalActDate(r.disposalId, null)} className="ml-2 text-xs text-zinc-500 underline">
+                                  지우기
+                                </button>
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          <span className="block space-y-1">
+                            <span>{NEEDS_CHECK}</span>
+                            {d?.legalActDateUnverified && (
+                              <span className="block text-xs text-amber-800 dark:text-amber-300">
+                                AI가 읽은 날짜 {d.legalActDateUnverified}를 근거 문단에서 확인하지 못해 비웠어요. 원문을 보고 맞으면 직접 입력해 주세요.
+                              </span>
+                            )}
+                            <input
+                              type="date"
+                              max={today}
+                              aria-label={`${i + 1}번 처분행위 법률행위일 직접 입력`}
+                              onChange={(e) => onSetLegalActDate(r.disposalId, e.target.value || null)}
+                              className="block rounded border border-black/20 px-2 py-1 text-xs dark:border-white/25 dark:bg-zinc-900"
+                            />
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2">{r.oneYearEnd ?? "안 날 미입력"}</td>
                       <td className="py-2">{r.fiveYearEnd ?? NEEDS_CHECK}</td>
                       <td className="py-2">

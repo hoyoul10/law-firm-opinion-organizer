@@ -133,6 +133,8 @@ const ReplySummarySchema = z.object({
         subsequentAcquirer: Text.nullable(),
         property: Text,
         legalActDate: IsoDateSchema.nullable(),
+        legalActDateUnverified: IsoDateSchema.optional(),
+        legalActDateManual: z.boolean().optional(),
         sources: z.array(SourceLocationSchema).max(MAX_ITEMS),
       }),
     )

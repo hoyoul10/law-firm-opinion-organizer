@@ -87,9 +87,12 @@ function findFirst(input: ReplyInput, term: string): { order: number; location: 
   return null;
 }
 
+/** 근거 문단 앞뒤로 몇 문단까지 같은 근거로 보는지. 표가 있는 .hwpx는 칸마다 문단이 나뉘고, 쪽 경계에서도 이어지기 때문이다 */
+const CITED_NEIGHBORHOOD = 3;
+
 /**
- * 법률행위 일자(YYYY-MM-DD)가 근거 문단(또는 같은 파일·쪽의 바로 앞뒤 문단)에 적혀 있는지.
- * 날짜는 여러 표기("2025. 8. 30.", "2025년 8월 30일")를 같은 날짜로 본다.
+ * 법률행위 일자(YYYY-MM-DD)가 근거 문단(과 문서 순서상 앞뒤 3문단)에 적혀 있는지.
+ * 날짜는 여러 표기("2025. 8. 30.", "2025년 8월 30일", "2025/8/30")를 같은 날짜로 본다.
  */
 export function dateInCitedParagraphs(isoDate: string, sources: ExtractedSource[], cited: SourceLocation[]): boolean {
   const [y, mo, da] = isoDate.split("-");
@@ -97,10 +100,11 @@ export function dateInCitedParagraphs(isoDate: string, sources: ExtractedSource[
   for (const source of sources) {
     for (const loc of cited) {
       if (loc.fileName !== source.fileName || loc.paragraph === undefined) continue;
-      for (const seg of source.segments) {
-        const samePage = source.kind !== "pdf" || seg.page === loc.page;
-        if (samePage && Math.abs(seg.paragraph - loc.paragraph) <= 1 && datesIn(seg.text).has(want)) return true;
-      }
+      const at = source.segments.findIndex((seg) => seg.paragraph === loc.paragraph && (source.kind !== "pdf" || seg.page === loc.page));
+      if (at < 0) continue;
+      const from = Math.max(0, at - CITED_NEIGHBORHOOD);
+      const to = Math.min(source.segments.length - 1, at + CITED_NEIGHBORHOOD);
+      for (let i = from; i <= to; i++) if (datesIn(source.segments[i].text).has(want)) return true;
     }
   }
   return false;
@@ -111,7 +115,10 @@ export function recheckLegalActDates(summary: ReplySummary, sources: ExtractedSo
   return {
     ...summary,
     disposals: summary.disposals.map((d) =>
-      d.legalActDate && !dateInCitedParagraphs(d.legalActDate, sources, d.sources) ? { ...d, legalActDate: null } : d,
+      // 담당자가 화면에서 직접 넣은 날짜는 담당자가 원문을 보고 정한 값이므로 그대로 둔다
+      d.legalActDate && !d.legalActDateManual && !dateInCitedParagraphs(d.legalActDate, sources, d.sources)
+        ? { ...d, legalActDate: null, legalActDateUnverified: d.legalActDate }
+        : d,
     ),
   };
 }
@@ -190,11 +197,13 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
     if (!d.id.trim() || seenIds.has(d.id)) problems.push(`${where}: id가 비었거나 겹침`);
     seenIds.add(d.id);
     let legalActDate = clean(d.legalActDate);
+    let legalActDateUnverified: string | null = null;
     if (legalActDate && !isIsoDate(legalActDate)) problems.push(`${where}: 법률행위 일자가 YYYY-MM-DD 형식이 아님 (${legalActDate})`);
     const valid = validLocations(d.sources);
     // 제척기간은 이 날짜로 계산하므로, 이 처분행위가 근거로 든 문단(과 바로 앞뒤 문단)에 그 날짜가 실제로 있어야 한다.
     // 원문 다른 곳의 날짜를 고르거나 AI가 잘못 바꾼 날짜는 비우고 [확인 필요]로 둔다 (원문 속 지시 문구로 경고를 지우는 것도 막는다)
     if (legalActDate && isIsoDate(legalActDate) && !dateInCitedParagraphs(legalActDate, input.sources, valid.map(toSourceLocation))) {
+      legalActDateUnverified = legalActDate;
       legalActDate = null;
     }
     if (valid.length === 0) problems.push(`${where}: 원문 위치가 없음`);
@@ -213,6 +222,7 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
       subsequentAcquirer: clean(d.subsequentAcquirer),
       property: d.property.trim(),
       legalActDate,
+      ...(legalActDateUnverified && { legalActDateUnverified }),
       sources: valid.map(toSourceLocation),
     };
   });
@@ -276,7 +286,7 @@ export function validateSummaryOutput(output: SummaryOutput, input: ReplyInput):
 
 /* ───────── 초안 검사 ───────── */
 
-const DATE_PATTERN = /(\d{4})\s*(?:[.\-]|년)\s*(\d{1,2})\s*(?:[.\-]|월)\s*(\d{1,2})\s*(?:일|\.)?/g;
+const DATE_PATTERN = /(\d{4})\s*(?:[.\-/]|년)\s*(\d{1,2})\s*(?:[.\-/]|월)\s*(\d{1,2})\s*(?:일|\.)?/g;
 // 단위는 한 글자씩만 반복하고 숫자·단위·공백이 겹치지 않게 해, 긴 입력에서 검사 시간이 폭증하지 않게 한다 (보안 점검 SEC-002)
 const AMOUNT_PATTERN = /\d[\d,]*(?:\s*[억천백만](?:\s*\d[\d,]*)?)*\s*원/g;
 /** 초안 한 칸의 최대 글자 수. 넘으면 검사하지 않고 막는다 */

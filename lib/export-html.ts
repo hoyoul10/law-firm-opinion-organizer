@@ -1,7 +1,7 @@
 // 내려받기용 HTML 파일 만들기 (브라우저)
 // Design Ref: §4.3 — 담는 순서, 특수문자 처리, 스크립트 없음, 파일 이름
 
-import { draftSections, countNeedsCheck } from "./draft";
+import { draftSections } from "./draft";
 import { caseLabel, deadlineMessage, formatLocation } from "./labels";
 import {
   CHECKLIST_ITEMS,
@@ -53,6 +53,10 @@ function buildRequestHtml(bundle: DownloadBundle, label: string): string {
       parts.push(`<div class="field">${f.label ? `<span class="label">${e(f.label)}</span><br>` : ""}${multiline(f.text)}</div>`);
     }
   }
+  // 스캔본을 OCR로 읽은 자료가 바탕이면 받는 쪽도 알 수 있게 마지막에 한 줄 알린다 (PRD: OCR 사실을 내려받는 파일에 알림)
+  if (bundle.ocrFileNames && bundle.ocrFileNames.length > 0) {
+    parts.push(`<p class="meta">※ 이 초안은 스캔본을 OCR(AI 글자 인식)로 읽은 자료를 바탕으로 해 날짜·금액·이름·사건번호에 인식 오류가 있을 수 있습니다. 원본과 대조해 주세요.</p>`);
+  }
   return `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${e(`소송의뢰초안 ${label}`)}</title><style>${STYLE}</style></head>
@@ -61,17 +65,17 @@ ${parts.join("\n")}
 </body></html>`;
 }
 
+/** 초안이 없을 때(기타 유형, 또는 [정리 결과만 내려받기]) 담당자·검토자 참고용 정리 결과를 내보낸다 */
 export function buildDownloadHtml(bundle: DownloadBundle): string {
   const { summary, deadlines, draft, createdAt } = bundle;
   const label = caseLabel(summary.identity);
   if (draft) return buildRequestHtml(bundle, label);
-  const remaining = draft ? countNeedsCheck(draft, summary.disposals) : 0;
   const parts: string[] = [];
 
   // 1. 머리말
-  parts.push(`<h1>소송 의뢰 초안 · 회신 정리</h1>
+  parts.push(`<h1>회신 정리 결과</h1>
 <p class="meta">만든 날짜 ${e(createdAt)} · 로펌 의견 정리기</p>
-<p class="notice">AI가 법무법인 회신을 정리하고 초안을 만든 뒤, 담당자가 검토·수정한 문서입니다. 법률 판단은 법무법인 의견을 따릅니다.</p>`);
+<p class="notice">AI가 법무법인 회신을 정리한 결과를 담당자가 검토한 참고 자료입니다. 법률 판단은 법무법인 의견을 따릅니다.</p>`);
 
   // 2. 사건 표시
   parts.push(`<h2>사건</h2><table>
@@ -87,20 +91,8 @@ export function buildDownloadHtml(bundle: DownloadBundle): string {
   // 3. 경고 (낡은 결과 경고도 파일에 담아 검토자가 알 수 있게 한다)
   for (const notice of bundle.staleNotices ?? []) parts.push(`<p class="notice danger">⚠ ${e(notice)}</p>`);
   if (summary.typeMismatchWarning) parts.push(`<p class="notice">⚠ ${e(summary.typeMismatchWarning)} (고른 소송 유형은 바꾸지 않음)</p>`);
-  if (remaining > 0) parts.push(`<p class="notice danger">⚠ 초안에 [확인 필요] 표시가 ${remaining}곳 남아 있습니다.</p>`);
 
-  // 4. 초안 8항목
-  if (draft) {
-    parts.push(`<h2>소송 의뢰 초안</h2>`);
-    for (const section of draftSections(draft, summary.disposals)) {
-      parts.push(`<h3>${section.no}. ${e(section.title)}</h3>`);
-      for (const f of section.fields) {
-        parts.push(`<div class="field">${f.label ? `<span class="label">${e(f.label)}</span><br>` : ""}${multiline(f.text)}</div>`);
-      }
-    }
-  }
-
-  // 5. 제척기간
+  // 4. 제척기간
   if (deadlines) {
     parts.push(`<h2>제척기간</h2>`);
     if (deadlines.shortest) parts.push(`<p class="notice${deadlines.shortest.level === "expired" ? " danger" : ""}">가장 짧은 기한: ${e(deadlineMessage(deadlines.shortest))}</p>`);

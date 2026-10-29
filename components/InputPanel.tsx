@@ -121,6 +121,7 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
     const added: UploadedFile[] = [];
     const skipped: string[] = [];
     const renamed: string[] = [];
+    const cleaned: string[] = [];
     for (const file of Array.from(list)) {
       const all = [...current, ...added];
       // 이름·크기·수정 시각이 모두 같으면 같은 파일이므로 다시 올리지 않는다
@@ -132,12 +133,14 @@ export default function InputPanel({ value, setValue, onSubmit, busy, locked = f
       const used = new Set(all.map((f) => f.displayName));
       const safeName = safeFileName(file.name);
       const displayName = used.has(safeName) ? uniqueName(safeName, used) : safeName;
-      if (displayName !== file.name) renamed.push(`${file.name} → ${displayName}`);
+      if (displayName !== safeName) renamed.push(`${file.name} → ${displayName}`);
+      else if (safeName !== file.name) cleaned.push(`${file.name} → ${safeName}`);
       added.push({ id: `f${nextId++}`, file, displayName, round: 1, result: null });
     }
     const parts: string[] = [];
     if (skipped.length) parts.push(`이미 올린 파일이에요: ${skipped.join(", ")}`);
     if (renamed.length) parts.push(`이름이 같은 파일은 구분해서 올렸어요: ${renamed.join(", ")}`);
+    if (cleaned.length) parts.push(`파일 이름의 줄바꿈·| 같은 글자를 _로 바꿨어요: ${cleaned.join(", ")}`);
     setNotice(parts.length ? parts.join(" / ") : null);
     if (added.length > 0) setValue((prev) => ({ ...prev, files: [...prev.files, ...added] }));
   };

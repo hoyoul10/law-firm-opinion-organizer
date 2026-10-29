@@ -102,6 +102,10 @@ export interface Disposal {
   property: string;
   /** 법률행위 일자. 회신에 없으면 null */
   legalActDate: IsoDate | null;
+  /** AI가 읽었지만 근거 문단에서 확인되지 않아 비운 날짜. 담당자가 원문과 대조하도록 화면에 보여 준다 */
+  legalActDateUnverified?: IsoDate;
+  /** 담당자가 화면에서 직접 넣은 날짜. 서버의 근거 문단 대조에서 빼 준다 */
+  legalActDateManual?: boolean;
   sources: SourceLocation[];
 }
 
@@ -329,8 +333,8 @@ export interface DownloadBundle {
   draft: LawsuitDraft | null;
   /** 담당자가 사건정보 대조를 요청했을 때만 있다 */
   compare?: CaseCompare | null;
-  /** OCR로 읽은 파일 이름들. 내려받는 파일에 "인식 오류 가능" 안내를 넣는다 */
+  /** OCR로 읽은 파일 이름들. 정리 결과 파일에는 파일 이름과 "인식 오류 가능" 안내를, 초안 파일에는 마지막에 한 줄 안내만 넣는다 */
   ocrFileNames?: string[];
-  /** 내려받을 때 확인창에 떴던 "결과가 낡았다" 같은 경고. 파일을 받는 검토자도 알 수 있게 담는다 */
+  /** 내려받을 때 확인창에 떴던 "결과가 낡았다" 같은 경고. 정리 결과 파일에만 담는다(법무법인에 보내는 초안 파일에는 내부 경고를 넣지 않는다) */
   staleNotices?: string[];
 }
