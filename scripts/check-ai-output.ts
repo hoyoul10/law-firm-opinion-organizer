@@ -6,6 +6,7 @@ import { NOT_IN_REPLY, type ReplyInput } from "../lib/reply-types";
 import { ReplyInputSchema, SummaryOutputSchema, type SummaryOutput } from "../lib/server/schemas";
 import { validateDraftOutput, validateSummaryOutput } from "../lib/server/validate";
 import { countNeedsCheck } from "../lib/draft";
+import { computeDeadline, computeDeadlines } from "../lib/deadline";
 import { buildDownloadHtml, escapeHtml } from "../lib/export-html";
 
 let failed = 0;
@@ -131,6 +132,27 @@ const noId = goodOutput();
 noId.identity = { caseNumber: null, debtorName: " ", beneficiaryNames: [], sources: [] };
 const noIdResult = validateSummaryOutput(noId, input);
 check("사건번호·이름이 모두 없으면 입력 요청", noIdResult.ok && noIdResult.summary.identity.needsUserInput === true);
+
+console.log("\n■ 제척기간 계산 (기준일 2026-10-28)");
+{
+  const T = "2026-10-28";
+  const d = (legalActDate: string | null, known: string | null) => computeDeadline({ id: "x", legalActDate }, known, T);
+  const s3 = d("2021-12-20", "2026-10-01");
+  check("샘플 3: 안 날 있음 → 53일 노랑", s3.daysLeft === 53 && s3.level === "warning");
+  const s5 = d("2021-03-15", "2026-10-25");
+  check("샘플 5: 안 날 있음 → -227일 빨강", s5.daysLeft === -227 && s5.level === "expired" && !s5.fiveYearOnly);
+  const s5none = d("2021-03-15", null);
+  check("PLAN 31: 안 날 비움 + 5년 경과 → 빨강 경고(-227일)", s5none.daysLeft === -227 && s5none.level === "expired" && s5none.fiveYearOnly === true, JSON.stringify(s5none));
+  const s3none = d("2021-12-20", null);
+  check("PLAN 31: 안 날 비움 + 5년이 아직 안 지남 → [확인 필요]", s3none.level === "needs-check" && s3none.daysLeft === null);
+  check(
+    "5년 기한이 오늘(0일)이면 경과, 내일이면 [확인 필요]",
+    d("2021-10-28", null).level === "expired" && d("2021-10-28", null).daysLeft === 0 && d("2021-10-29", null).level === "needs-check",
+  );
+  check("법률행위일이 없으면 [확인 필요]", d(null, null).level === "needs-check" && d(null, "2026-01-01").level === "needs-check");
+  const many = computeDeadlines([{ id: "a", legalActDate: "2024-11-02" }, { id: "b", legalActDate: "2021-03-15" }, { id: "c", legalActDate: null }], null, T);
+  check("처분행위 여러 개: 안 날 없이 경과한 것이 가장 짧은 기한", many.shortest?.disposalId === "b" && many.shortest.level === "expired");
+}
 
 console.log("\n■ 초안 검사 (PLAN 20~23)");
 if (good.ok) {

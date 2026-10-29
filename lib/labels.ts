@@ -27,7 +27,10 @@ export function deadlineMessage(r: DeadlineResult): string {
   if (r.level === "needs-check" || r.daysLeft === null) {
     return `${NEEDS_CHECK} 취소원인을 안 날과 법률행위 일자가 모두 있어야 남은 일수를 계산할 수 있어요`;
   }
-  if (r.level === "expired") return `제척기간 경과 가능성 (기한 ${r.deadline}, ${Math.abs(r.daysLeft)}일 지남)`;
+  if (r.level === "expired") {
+    const note = r.fiveYearOnly ? " — 취소원인을 안 날을 입력하지 않았지만 법률행위일 5년 기한이 이미 지났어요" : "";
+    return `제척기간 경과 가능성 (기한 ${r.deadline}, ${Math.abs(r.daysLeft)}일 지남)${note}`;
+  }
   if (r.level === "warning") return `기한이 ${r.daysLeft}일 남았어요 (${r.deadline})`;
   return `기한 ${r.deadline}까지 ${r.daysLeft}일 남았어요`;
 }

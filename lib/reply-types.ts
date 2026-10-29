@@ -178,6 +178,8 @@ export interface DeadlineResult {
   deadline: IsoDate | null;
   /** 오늘부터 deadline까지 남은 일수 (지났으면 음수) */
   daysLeft: number | null;
+  /** '안 날'이 없지만 5년 기한이 이미 지나 경과로 본 경우 */
+  fiveYearOnly?: boolean;
   level: DeadlineLevel;
 }
 

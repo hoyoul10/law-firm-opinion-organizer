@@ -141,6 +141,7 @@ const DeadlineResultSchema = z.object({
   fiveYearEnd: IsoDateSchema.nullable(),
   deadline: IsoDateSchema.nullable(),
   daysLeft: z.number().int().nullable(),
+  fiveYearOnly: z.boolean().optional(),
   level: z.enum(["ok", "warning", "expired", "needs-check"]),
 });
 

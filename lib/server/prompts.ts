@@ -154,7 +154,7 @@ export function draftInput(
           .map((d) => {
             const disposal = summary.disposals.find((x) => x.id === d.disposalId);
             const name = disposal ? `${disposal.kind}(수익자 ${disposal.beneficiary})` : d.disposalId;
-            return `- ${name}: 1년 기한 ${d.oneYearEnd ?? "담당자가 취소원인을 안 날을 입력하지 않음"}, 5년 기한 ${d.fiveYearEnd ?? "법률행위 일자 없음"}, 적용 기한 ${d.deadline ?? NEEDS_CHECK}, 남은 일수 ${d.daysLeft ?? NEEDS_CHECK}, 판정 ${LEVEL_TEXT[d.level]}`;
+            return `- ${name}: 1년 기한 ${d.oneYearEnd ?? "담당자가 취소원인을 안 날을 입력하지 않음"}, 5년 기한 ${d.fiveYearEnd ?? "법률행위 일자 없음"}, 적용 기한 ${d.deadline ?? NEEDS_CHECK}, 남은 일수 ${d.daysLeft ?? NEEDS_CHECK}, 판정 ${LEVEL_TEXT[d.level]}${d.fiveYearOnly ? " (취소원인을 안 날은 입력되지 않았지만 법률행위일 5년 기한이 이미 지나 경과로 봄)" : ""}`;
           })
           .join("\n")
       : `- 처분행위가 없어 계산하지 못함 ${NEEDS_CHECK}`;

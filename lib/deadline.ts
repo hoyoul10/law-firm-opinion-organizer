@@ -27,7 +27,14 @@ function levelOf(daysLeft: number | null): DeadlineLevel {
   return "ok";
 }
 
-/** 처분행위 1건의 제척기간. 두 날짜 중 하나라도 없으면 남은 일수를 계산하지 않는다 */
+/**
+ * 처분행위 1건의 제척기간.
+ * - 두 날짜(안 날, 법률행위 일자)가 모두 있으면 먼저 끝나는 기한으로 계산한다.
+ * - '안 날'이 없어도 5년 기한이 이미 지났으면 경과로 본다 (담당자 결정 2026-10-29).
+ *   안 날이 언제든 5년이 지났으면 어느 쪽이든 기한이 지난 것이기 때문이다.
+ * - 안 날이 없고 5년 기한이 아직 안 지났으면 1년 기한이 먼저 올 수 있어 계산하지 않고 [확인 필요]로 둔다.
+ * Plan SC: 31
+ */
 export function computeDeadline(
   disposal: Pick<Disposal, "id" | "legalActDate">,
   cancellationKnownDate: IsoDate | null,
@@ -38,9 +45,14 @@ export function computeDeadline(
 
   let deadline: IsoDate | null = null;
   let daysLeft: number | null = null;
+  let fiveYearOnly = false;
   if (oneYearEnd && fiveYearEnd) {
     deadline = oneYearEnd < fiveYearEnd ? oneYearEnd : fiveYearEnd;
     daysLeft = daysBetween(today, deadline);
+  } else if (!oneYearEnd && fiveYearEnd && daysBetween(today, fiveYearEnd) <= 0) {
+    deadline = fiveYearEnd;
+    daysLeft = daysBetween(today, fiveYearEnd);
+    fiveYearOnly = true;
   }
 
   return {
@@ -49,6 +61,7 @@ export function computeDeadline(
     fiveYearEnd,
     deadline,
     daysLeft,
+    fiveYearOnly,
     level: levelOf(daysLeft),
   };
 }
