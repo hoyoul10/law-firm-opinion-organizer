@@ -92,6 +92,16 @@ export function hwpxParagraphs(bundle: DownloadBundle): string[] {
   const out: string[] = [];
   const add = (...lines: string[]) => lines.forEach((l) => l.split("\n").forEach((x) => out.push(x)));
 
+  // 초안이 있으면 법무법인에 보내는 소송 의뢰서로 초안 8항목만 담는다 (참고 자료는 화면에서만 본다)
+  if (draft) {
+    add("소송 의뢰서 (초안)", `사건 ${caseLabel(summary.identity) || "-"} · 작성일 ${createdAt}`);
+    for (const section of draftSections(draft, summary.disposals)) {
+      add("", `${section.no}. ${section.title}`);
+      for (const f of section.fields) add(...(f.label ? [`[${f.label}]`] : []), f.text);
+    }
+    return out;
+  }
+
   add("소송 의뢰 초안 · 회신 정리", `만든 날짜 ${createdAt} · 로펌 의견 정리기`, "AI가 법무법인 회신을 정리하고 초안을 만든 뒤, 담당자가 검토·수정한 문서입니다. 법률 판단은 법무법인 의견을 따릅니다.", "");
   add("사건", `사건 표시: ${caseLabel(summary.identity) || "-"}${summary.identity.manualLabel ? " (담당자 직접 입력)" : where(summary.identity.sources)}`);
   add(`법무법인: ${summary.firmName ?? NOT_IN_REPLY}`, `소송 유형: ${LAWSUIT_TYPE_LABELS[summary.lawsuitType]}`, "");

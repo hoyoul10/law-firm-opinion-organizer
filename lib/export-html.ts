@@ -37,9 +37,34 @@ table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid 
 .label{font-weight:bold}.muted{color:#888}.field{white-space:normal;margin:4px 0 10px}
 @media print{body{margin:0}}`;
 
+/**
+ * 초안이 있으면 법무법인에 소송을 의뢰하는 문서로 초안 8항목만 내보낸다.
+ * 점검표·제척기간 표·쟁점·용어 풀이·대조 결과는 담당자가 화면에서 보는 참고 자료라 넣지 않는다 (담당자 결정 2026-10-29).
+ */
+function buildRequestHtml(bundle: DownloadBundle, label: string): string {
+  const { summary, draft, createdAt } = bundle;
+  const parts: string[] = [
+    `<h1>소송 의뢰서 (초안)</h1>`,
+    `<p class="meta">사건 ${e(label || "-")} · 작성일 ${e(createdAt)}</p>`,
+  ];
+  for (const section of draftSections(draft!, summary.disposals)) {
+    parts.push(`<h2>${section.no}. ${e(section.title)}</h2>`);
+    for (const f of section.fields) {
+      parts.push(`<div class="field">${f.label ? `<span class="label">${e(f.label)}</span><br>` : ""}${multiline(f.text)}</div>`);
+    }
+  }
+  return `<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${e(`소송의뢰초안 ${label}`)}</title><style>${STYLE}</style></head>
+<body>
+${parts.join("\n")}
+</body></html>`;
+}
+
 export function buildDownloadHtml(bundle: DownloadBundle): string {
   const { summary, deadlines, draft, createdAt } = bundle;
   const label = caseLabel(summary.identity);
+  if (draft) return buildRequestHtml(bundle, label);
   const remaining = draft ? countNeedsCheck(draft, summary.disposals) : 0;
   const parts: string[] = [];
 

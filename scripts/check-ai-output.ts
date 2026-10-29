@@ -11,7 +11,7 @@ import { draftInput, summarizeInstructions, tagSources } from "../lib/server/pro
 import { computeDeadline, computeDeadlines } from "../lib/deadline";
 import { deadlineMessage } from "../lib/labels";
 import JSZip from "jszip";
-import { buildHwpx, hwpxFileName } from "../lib/export-hwpx";
+import { buildHwpx, hwpxFileName, hwpxParagraphs } from "../lib/export-hwpx";
 import { buildDownloadHtml, escapeHtml } from "../lib/export-html";
 
 let failed = 0;
@@ -412,9 +412,12 @@ console.log("\n■ 차이 분석 2차 수정 (OCR 표시 전달, 날짜·이름 
     check("처분행위가 0개면 AI가 무엇을 써도 수익자 칸 3개를 '회신에 없음'으로 고정", none.ok && none.draft.perBeneficiary.length === 1 && Object.values(none.draft.perBeneficiary[0]).slice(1).every((v) => v === NOT_IN_REPLY));
     const fbName = validateDraftOutput(base, { ...good.summary, disposals: [{ ...good.summary.disposals[0], beneficiary: "[확인 필요] 남수익" }] }, null, input.sources);
     check("수익자 이름 앞의 [확인 필요]는 이름 대조에서 제외", fbName.ok && !fbName.draft.perBeneficiary[0].beneficiaryAndProperty.includes("정리 결과와 다름"));
-    // 18. 낡은 결과 경고가 내려받는 파일에도 들어간다
-    const stale = buildDownloadHtml({ createdAt: "2026-10-28", summary: good.summary, deadlines: null, draft: base, staleNotices: ["초안 4번이 <낡았어요>"] });
-    check("내려받는 HTML에 낡은 결과 경고(특수문자 처리 포함)", stale.includes("초안 4번이 &lt;낡았어요&gt;"));
+    // 담당자 결정(2026-10-29): 초안이 있으면 내려받는 파일은 법무법인에 보내는 소송 의뢰서(초안 8항목)만 담는다
+    const req = buildDownloadHtml({ createdAt: "2026-10-28", summary: good.summary, deadlines: computeDeadlines(good.summary.disposals, "2026-10-01", "2026-10-28"), draft: base, ocrFileNames: ["스캔.pdf"], staleNotices: ["낡았어요"] });
+    check("초안이 있으면 HTML에 초안 8항목이 모두 들어감", [1, 2, 3, 4, 5, 6, 7, 8].every((n) => req.includes(`<h2>${n}. `)));
+    check("초안이 있으면 HTML에 점검표·제척기간 표·쟁점·용어·내부 안내가 없음", !/점검 항목|용어 풀이|<h2>쟁점|<h2>제척기간|<h2>법무법인 의견|스캔\.pdf|낡았어요/.test(req));
+    const noDraft = buildDownloadHtml({ createdAt: "2026-10-28", summary: good.summary, deadlines: null, draft: null, staleNotices: ["<낡았어요>"] });
+    check("초안이 없으면(기타 유형 등) 정리 결과를 내보내고 낡은 결과 경고도 담음", noDraft.includes("점검 항목 10개") && noDraft.includes("&lt;낡았어요&gt;"));
   }
 }
 
@@ -447,7 +450,9 @@ async function hwpxChecks() {
   check("글 속 <, &가 XML 문자로 바뀜", section.includes("&lt;b&gt;굵게&lt;/b&gt; &amp;") && !section.includes("<b>"));
   check("XML에 못 쓰는 제어 문자는 지움", !section.includes("\u0007"));
   check("여러 줄 글은 문단으로 나뉨", paragraphs.includes("2025. 8. 30. 매도") && paragraphs.includes("둘째 줄"));
-  check("제척기간·점검 10항목·용어가 함께 들어감", paragraphs.some((p) => p.startsWith("가장 짧은 기한")) && paragraphs.filter((p) => /^\d+\. .* \[(있음|불명확|회신에 없음)\]/.test(p)).length === 10 && paragraphs.some((p) => p.startsWith("수익자:")));
+  check("초안이 있으면 초안 8항목만 담김(점검·제척기간·용어 없음)", paragraphs[0] === "소송 의뢰서 (초안)" && [1, 2, 3, 4, 5, 6, 7, 8].every((n) => paragraphs.some((p) => p.startsWith(`${n}. `))) && !paragraphs.some((p) => p.startsWith("가장 짧은 기한") || p.startsWith("점검 항목") || p.startsWith("용어 풀이")));
+  const refParagraphs = hwpxParagraphs({ createdAt: "2026-10-28", summary: r.summary, deadlines: computeDeadlines(r.summary.disposals, "2026-10-01", "2026-10-28"), draft: null });
+  check("초안이 없으면 제척기간·점검 10항목·용어가 담김", refParagraphs.some((p) => p.startsWith("가장 짧은 기한")) && refParagraphs.filter((p) => /^\d+\. .* \[(있음|불명확|회신에 없음)\]/.test(p)).length === 10 && refParagraphs.some((p) => p.startsWith("수익자:")));
   check("파일 이름이 .hwpx", hwpxFileName(bundle).endsWith(".hwpx") && !hwpxFileName(bundle).includes("html"), hwpxFileName(bundle));
 
   console.log("\n■ 요청 거절 이유 안내");
